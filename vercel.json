@@ -1,0 +1,8 @@
+{
+  "regions": ["cdg1"],
+  "functions": {
+    "app/api/leads/[id]/research/route.ts": { "maxDuration": 60 },
+    "app/api/leads/[id]/brief/route.ts": { "maxDuration": 30 },
+    "app/api/leads/[id]/outcome/route.ts": { "maxDuration": 60 }
+  }
+}
