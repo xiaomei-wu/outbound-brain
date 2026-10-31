@@ -16,6 +16,7 @@ import { getOrRunCompanyCheck } from '@/lib/claude/icp-check';
 import { generateCallCard } from '@/lib/claude/call-card';
 import { icpNeedleProperties, pushToNeedle } from '@/lib/needle-writeback';
 import { autoRefill, enrollPendingChecked } from '@/lib/refill-run';
+import { isIcpActive } from './status';
 import { routeForScore, roleMatches, selectCompaniesToCheck } from './routing';
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,10 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
     (existingChecks ?? []).map((r: { company_key: string }) => r.company_key),
   );
 
+  // Companies already queued or running in another run are not checked twice
+  const now = new Date();
+  for (const l of leads) if (l.companyKey && isIcpActive(l, now)) alreadyChecked.add(l.companyKey);
+
   // Select companies to check (max 10)
   const toCheck = selectCompaniesToCheck(leads, alreadyChecked, 10);
 
@@ -115,6 +120,12 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
       const check = await getOrRunCompanyCheck(representative, campaign);
       await applyCheckToLeads(companyLeads, check, campaign, catalog, db);
       await setStatus(ids, null);
+      // A successful check proves Claude's credit works again: drop stale "credit used up" failures
+      await db
+        .from('lead')
+        .update({ icp_status: null, icp_error: null })
+        .eq('icp_status', 'failed')
+        .ilike('icp_error', '%credit balance%');
     } catch (err) {
       console.error(`ICP check failed for ${key}:`, err);
       await setStatus(ids, 'failed', (err instanceof Error ? err.message : String(err)).slice(0, 300));
