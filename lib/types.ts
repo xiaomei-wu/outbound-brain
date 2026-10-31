@@ -294,6 +294,7 @@ export interface Lead {
   engagementAt: string | null;
   icpStatus: IcpStatus | null;
   icpStatusAt: string | null;
+  icpError: string | null;        // reason of the last failed background check
   needleEnrolledAt: string | null; // enrolled in the chosen Needle campaign
   needleEnrollPending: boolean;     // found by the Needle search; enrol after an A/B check
   callCard: CallCard | null;

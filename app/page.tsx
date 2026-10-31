@@ -124,7 +124,7 @@ export default async function CockpitPage() {
       </div>
 
       {/* Background ICP checks + Needle write-back in progress */}
-      <SyncIndicator active={activity.active} failed={activity.failed} />
+      <SyncIndicator active={activity.active} failed={activity.failed} creditExhausted={activity.creditExhausted} />
       {refill && <RefillBanner state={refill} />}
 
       {/* Lead table (client component) */}

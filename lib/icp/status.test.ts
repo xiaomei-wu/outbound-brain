@@ -10,14 +10,18 @@ describe('icpActivity', () => {
       { icpStatus: 'queued', icpStatusAt: at(1) },
       { icpStatus: 'running', icpStatusAt: at(2) },
       { icpStatus: null, icpStatusAt: null },
-    ], now)).toEqual({ active: 2, failed: 0 });
+    ], now)).toEqual({ active: 2, failed: 0, creditExhausted: false });
   });
 
   it('ignores stale entries (older than 15 minutes) so no spinner runs forever', () => {
-    expect(icpActivity([{ icpStatus: 'running', icpStatusAt: at(16) }], now)).toEqual({ active: 0, failed: 0 });
+    expect(icpActivity([{ icpStatus: 'running', icpStatusAt: at(16) }], now)).toEqual({ active: 0, failed: 0, creditExhausted: false });
   });
 
   it('counts failures separately', () => {
-    expect(icpActivity([{ icpStatus: 'failed', icpStatusAt: at(1) }], now)).toEqual({ active: 0, failed: 1 });
+    expect(icpActivity([{ icpStatus: 'failed', icpStatusAt: at(1) }], now)).toEqual({ active: 0, failed: 1, creditExhausted: false });
+  });
+
+  it('recognises an exhausted Claude credit', () => {
+    expect(icpActivity([{ icpStatus: 'failed', icpStatusAt: at(1), icpError: '400 Your credit balance is too low to access the Anthropic API' }], now).creditExhausted).toBe(true);
   });
 });

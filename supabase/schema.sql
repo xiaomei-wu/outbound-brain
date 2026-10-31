@@ -285,3 +285,5 @@ alter table campaign add column if not exists needle_search_state jsonb;
 update lead set needle_enrolled_at = coalesce(needle_synced_at, created_at)
   where needle_enrolled_at is null
     and (origin = 'needle_campaign' or origin_detail = 'in Needle-Kampagne aufgenommen');
+-- Why the last background ICP check failed (shown on the dashboard, e.g. Claude credit used up).
+alter table lead add column if not exists icp_error text;

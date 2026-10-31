@@ -7,7 +7,7 @@
 
 import { getDb } from '@/lib/db';
 import { createNeedleLeads, getLinkedinProfile, resolveConnectedAccountId, searchLinkedinPeople } from '@/lib/needle';
-import { currentJob, GERMANY_LOCATION_ID, nextSearchState, parseHeadline, SEARCH_KEYWORDS, type SearchState } from '@/lib/needle-search';
+import { campaignKeywords, currentJob, GERMANY_LOCATION_ID, nextSearchState, parseHeadline, SEARCH_KEYWORDS, type SearchState } from '@/lib/needle-search';
 import { companyKey } from '@/lib/origin';
 import { splitName } from '@/lib/refill';
 import { normalizeLinkedinUrl } from '@/lib/reply-routing';
@@ -23,23 +23,55 @@ export interface NeedleSearchResult {
   keyword: string;
 }
 
-export async function runNeedleSearch(): Promise<NeedleSearchResult> {
+/**
+ * mode "keywords": the app's real-estate search terms in turn.
+ * mode "campaign": search terms from the roles of the people already in the connected campaign.
+ */
+export async function runNeedleSearch(mode: 'keywords' | 'campaign' = 'keywords'): Promise<NeedleSearchResult & { campaignName: string | null }> {
   const db = getDb();
-  const { data: c } = await db.from('campaign').select('id, needle_campaign_id, needle_search_state').eq('is_active', true).limit(1).single();
-  const campaign = c as { id: string; needle_campaign_id: string | null; needle_search_state: SearchState | null } | null;
+  const { data: c } = await db
+    .from('campaign')
+    .select('id, needle_campaign_id, needle_campaign_name, needle_search_state')
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+  const campaign = c as {
+    id: string;
+    needle_campaign_id: string | null;
+    needle_campaign_name: string | null;
+    needle_search_state: (SearchState & { campaign?: { keyword: string; cursor: string | null } }) | null;
+  } | null;
   if (!campaign?.needle_campaign_id) throw new Error('Bitte zuerst auf der Setup-Seite eine Needle-Kampagne wählen.');
   const account = await resolveConnectedAccountId();
   if (!account) throw new Error('Kein LinkedIn-Konto in Needle gefunden.');
 
-  const state = campaign.needle_search_state ?? { keywordIndex: 0, cursor: null };
-  const keyword = SEARCH_KEYWORDS[state.keywordIndex % SEARCH_KEYWORDS.length];
+  const stored = campaign.needle_search_state ?? { keywordIndex: 0, cursor: null };
+  let keyword: string;
+  let startCursor: string | null;
+  if (mode === 'campaign') {
+    const { data: roleRows } = await db
+      .from('lead')
+      .select('role')
+      .not('needle_enrolled_at', 'is', null)
+      .not('role', 'is', null);
+    keyword = campaignKeywords(((roleRows ?? []) as { role: string }[]).map((r) => r.role));
+    // Continue the campaign search while its search words stay the same
+    startCursor = stored.campaign?.keyword === keyword ? stored.campaign.cursor : null;
+  } else {
+    keyword = SEARCH_KEYWORDS[stored.keywordIndex % SEARCH_KEYWORDS.length];
+    startCursor = stored.cursor;
+  }
   const { hits, cursor, remainingToday } = await searchLinkedinPeople(account, {
     keywords: keyword,
     locations: [GERMANY_LOCATION_ID],
-    cursor: state.cursor,
+    cursor: startCursor,
     limit: PAGE_SIZE,
   });
-  await db.from('campaign').update({ needle_search_state: nextSearchState(state, cursor) }).eq('id', campaign.id);
+  const nextState =
+    mode === 'campaign'
+      ? { ...stored, campaign: { keyword, cursor } }
+      : { ...nextSearchState(stored, cursor), ...(stored.campaign ? { campaign: stored.campaign } : {}) };
+  await db.from('campaign').update({ needle_search_state: nextState }).eq('id', campaign.id);
 
   // Skip people we already have (by LinkedIn identity)
   const { data: existing } = await db.from('lead').select('profile_url').not('profile_url', 'is', null);
@@ -95,7 +127,7 @@ export async function runNeedleSearch(): Promise<NeedleSearchResult> {
         needle_lead_id: needleId,
         source: 'needle',
         origin: 'needle_search',
-        origin_detail: `Needle-Suche „${keyword}“`,
+        origin_detail: mode === 'campaign' ? `Needle-Kampagne · Suche „${keyword}“` : `Needle-Suche „${keyword}“`,
         is_test: false,
         needle_enroll_pending: true,
         needle_synced_at: new Date().toISOString(),
@@ -113,5 +145,6 @@ export async function runNeedleSearch(): Promise<NeedleSearchResult> {
     newLeadIds,
     remainingToday,
     keyword,
+    campaignName: campaign.needle_campaign_name,
   };
 }

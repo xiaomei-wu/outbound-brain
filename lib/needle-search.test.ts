@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { currentJob, nextSearchState, parseHeadline, SEARCH_KEYWORDS } from './needle-search';
+import { campaignKeywords, currentJob, nextSearchState, parseHeadline, SEARCH_KEYWORDS } from './needle-search';
 
 describe('parseHeadline', () => {
   it('splits role and company on common separators', () => {
@@ -29,5 +29,21 @@ describe('nextSearchState', () => {
     expect(nextSearchState({ keywordIndex: 0, cursor: null }, 'c1')).toEqual({ keywordIndex: 0, cursor: 'c1' });
     expect(nextSearchState({ keywordIndex: 0, cursor: 'c1' }, null)).toEqual({ keywordIndex: 1, cursor: null });
     expect(nextSearchState({ keywordIndex: SEARCH_KEYWORDS.length - 1, cursor: 'x' }, null)).toEqual({ keywordIndex: 0, cursor: null });
+  });
+});
+
+describe('campaignKeywords', () => {
+  it('derives the most common role words from the campaign’s own leads', () => {
+    expect(campaignKeywords([
+      'Leiter Projektentwicklung & Grundstücksakquise',
+      'Projektentwicklung Akquisition',
+      'Senior Projektleiter/ Expert Acquisition',
+      'Teamleiterin Projektentwicklung',
+      'Projektleiter Grundstück- und Objektankauf',
+    ])).toBe('Projektentwicklung Grundstücksakquise');
+  });
+
+  it('falls back to the default search without roles', () => {
+    expect(campaignKeywords([])).toBe(SEARCH_KEYWORDS[0]);
   });
 });

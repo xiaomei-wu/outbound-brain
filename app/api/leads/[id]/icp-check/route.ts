@@ -58,8 +58,8 @@ export async function POST(
 
   const campaign = toCampaign(campaignRow as CampaignRow);
 
-  const setStatus = (status: 'running' | 'failed' | null) =>
-    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString() }).eq('id', id);
+  const setStatus = (status: 'running' | 'failed' | null, error: string | null = null) =>
+    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString(), icp_error: error }).eq('id', id);
   await setStatus('running');
 
   try {
@@ -166,7 +166,7 @@ export async function POST(
     });
   } catch (err) {
     console.error('POST /api/leads/[id]/icp-check error:', err);
-    await setStatus('failed');
+    await setStatus('failed', (err instanceof Error ? err.message : String(err)).slice(0, 300));
     return NextResponse.json(
       {
         error:

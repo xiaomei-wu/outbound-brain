@@ -7,12 +7,13 @@ import { AlertTriangleIcon, Loader2Icon } from 'lucide-react';
 interface SyncIndicatorProps {
   active: number;
   failed: number;
+  creditExhausted?: boolean;
 }
 
 const POLL_MS = 5000;
 
 /** Shows running background ICP checks (each ends with the Needle write-back) and polls until done. */
-export function SyncIndicator({ active, failed }: SyncIndicatorProps) {
+export function SyncIndicator({ active, failed, creditExhausted = false }: SyncIndicatorProps) {
   const router = useRouter();
 
   useEffect(() => {
@@ -34,7 +35,9 @@ export function SyncIndicator({ active, failed }: SyncIndicatorProps) {
       {failed > 0 && (
         <span className="flex items-center gap-1.5 text-amber-800 dark:text-amber-200">
           <AlertTriangleIcon className="h-3.5 w-3.5" />
-          {failed} ICP-Check{failed === 1 ? '' : 's'} fehlgeschlagen — „Offene ICP-Checks starten“ versucht es erneut
+          {creditExhausted
+            ? `${failed} ICP-Check${failed === 1 ? '' : 's'} gestoppt: Claude-Guthaben aufgebraucht — in der Claude Console aufladen, dann „Offene ICP-Checks starten“.`
+            : `${failed} ICP-Check${failed === 1 ? '' : 's'} fehlgeschlagen — „Offene ICP-Checks starten“ versucht es erneut`}
         </span>
       )}
     </div>

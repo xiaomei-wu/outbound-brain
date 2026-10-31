@@ -42,3 +42,31 @@ export function currentJob(
   const job = experience?.find((e) => !e.endDate) ?? null;
   return { role: job?.title ?? null, company: job?.companyName ?? null };
 }
+
+/** Generic role words that say nothing about the target group. */
+const ROLE_STOPWORDS = new Set([
+  'leiter', 'leiterin', 'leitung', 'teamleiter', 'teamleiterin', 'senior', 'junior', 'head', 'expert',
+  'manager', 'managerin', 'projektleiter', 'projektleiterin', 'director', 'gmbh', 'regionalleiter',
+  'und', 'and', 'for', 'the', 'der', 'die', 'des', 'bei',
+]);
+
+/**
+ * Search words from the roles of the people already in the connected campaign: the two most
+ * frequent meaningful words (e.g. "Projektentwicklung Grundstücksakquise").
+ */
+export function campaignKeywords(roles: string[]): string {
+  const counts = new Map<string, { word: string; n: number; first: number }>();
+  let order = 0;
+  for (const role of roles) {
+    for (const raw of role.split(/[\s/&|,()+.-]+/)) {
+      const word = raw.trim();
+      const key = word.toLowerCase();
+      if (word.length < 6 || ROLE_STOPWORDS.has(key)) continue;
+      const entry = counts.get(key) ?? { word, n: 0, first: order++ };
+      entry.n++;
+      counts.set(key, entry);
+    }
+  }
+  const top = [...counts.values()].sort((a, b) => b.n - a.n || a.first - b.first).slice(0, 2).map((e) => e.word);
+  return top.length ? top.join(' ') : SEARCH_KEYWORDS[0];
+}

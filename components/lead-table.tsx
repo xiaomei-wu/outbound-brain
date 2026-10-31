@@ -237,7 +237,7 @@ export function LeadTable({ leads, triggersMap, icpScores, needleSends, hasNeedl
    * Needle searches LinkedIn for new people; after their ICP check the A/B ones enter the
    * campaign. The click is the approval; a sending campaign asks for confirmation first.
    */
-  function handleSendToNeedle() {
+  function handleSendToNeedle(mode: 'keywords' | 'campaign') {
     if (
       needleSends &&
       !window.confirm(
@@ -248,7 +248,7 @@ export function LeadTable({ leads, triggersMap, icpScores, needleSends, hasNeedl
     }
     startSendToNeedle(async () => {
       try {
-        const res = await fetch('/api/needle/search-leads', { method: 'POST' });
+        const res = await fetch(`/api/needle/search-leads${mode === 'campaign' ? '?mode=campaign' : ''}`, { method: 'POST' });
         const data: { message?: string; error?: string } = await res.json().catch(() => ({}));
         if (!res.ok) {
           toast.error(data.error ?? 'Aufnahme in die Needle-Kampagne fehlgeschlagen.');
@@ -409,13 +409,25 @@ export function LeadTable({ leads, triggersMap, icpScores, needleSends, hasNeedl
         <Button
           variant="outline"
           size="sm"
-          onClick={handleSendToNeedle}
+          onClick={() => handleSendToNeedle('keywords')}
           disabled={anyBusy || !hasNeedle}
           className="text-xs"
           title="Needle sucht auf LinkedIn neue Projektentwickler (Deutschland). Nach dem ICP-Check kommen die A/B-Leads in die Needle-Kampagne."
         >
           {isSendingToNeedle ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SendIcon className="h-3 w-3" />}
           Neue Leads über Needle
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => handleSendToNeedle('campaign')}
+          disabled={anyBusy || !hasNeedle}
+          className="text-xs"
+          title="Sucht über die verbundene Needle-Kampagne: Suchbegriffe aus den Rollen der Personen, die schon in der Kampagne sind. Nach dem ICP-Check kommen die A/B-Leads in genau diese Kampagne."
+        >
+          {isSendingToNeedle ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SendIcon className="h-3 w-3" />}
+          Neue Leads über Needle-Kampagne
         </Button>
 
         <Button

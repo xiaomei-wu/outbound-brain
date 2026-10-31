@@ -98,8 +98,8 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
 
   // Visible progress: queued → running → cleared after the Needle write-back (or failed)
   const idsFor = (key: string) => leads.filter((l) => l.companyKey === key).map((l) => l.id);
-  const setStatus = (ids: string[], status: 'queued' | 'running' | 'failed' | null) =>
-    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString() }).in('id', ids);
+  const setStatus = (ids: string[], status: 'queued' | 'running' | 'failed' | null, error: string | null = null) =>
+    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString(), icp_error: error }).in('id', ids);
   await setStatus(toCheck.flatMap(idsFor), 'queued');
 
   // Run checks CHECK_CONCURRENCY at a time: ~60 s each, and 10 sequential checks
@@ -117,7 +117,7 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
       await setStatus(ids, null);
     } catch (err) {
       console.error(`ICP check failed for ${key}:`, err);
-      await setStatus(ids, 'failed');
+      await setStatus(ids, 'failed', (err instanceof Error ? err.message : String(err)).slice(0, 300));
       // Continue with next company
     }
   }

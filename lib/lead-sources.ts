@@ -234,6 +234,7 @@ export async function importAiArkLeads(apiKey: string, page = 0): Promise<AiArkI
       engagementAt: null,
       icpStatus: null,
       icpStatusAt: null,
+      icpError: null,
       needleEnrolledAt: null,
       needleEnrollPending: false,
     });
