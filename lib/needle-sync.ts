@@ -63,6 +63,9 @@ export function mapCampaignLead(l: NeedleCampaignLead, campaignName: string): Ne
     reply_quote: null,
     reply_reason: null,
     reply_at: null,
+    needle_synced_at: null,
+    engagement_stage: null,
+    engagement_at: null,
   };
 }
 

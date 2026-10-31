@@ -1,5 +1,5 @@
 /**
- * POST /api/webhooks/needle — Needle webhook intake (registered for LinkedIn message events).
+ * POST /api/webhooks/needle — Needle webhook intake (LinkedIn invites, messages and replies).
  *
  * Verifies the Standard Webhooks signature (webhook-id / webhook-timestamp / webhook-signature,
  * secret NEEDLE_WEBHOOK_SECRET = the whsec_ value Needle returned at registration), answers
@@ -10,7 +10,7 @@
 import { after } from 'next/server';
 import { env } from '@/lib/env';
 import type { NeedleEvent } from '@/lib/needle';
-import { analyzeLeadReplies, ingestMessageEvents, MESSAGE_EVENT_TYPES } from '@/lib/needle-replies';
+import { analyzeLeadReplies, CAMPAIGN_EVENT_TYPES, ingestMessageEvents } from '@/lib/needle-replies';
 import { verifyStandardWebhook } from '@/lib/standard-webhooks';
 
 export async function POST(request: Request) {
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const event = payload.data;
-  if (!event || !payload.type || !MESSAGE_EVENT_TYPES.includes(payload.type)) {
+  if (!event || !payload.type || !CAMPAIGN_EVENT_TYPES.includes(payload.type)) {
     return new Response(null, { status: 204 });
   }
 

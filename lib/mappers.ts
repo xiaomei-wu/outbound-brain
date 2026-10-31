@@ -4,6 +4,7 @@
  */
 
 import type {
+  EngagementStage,
   ReplySignal,
   CallCard,
   CompanyCheck,
@@ -124,6 +125,9 @@ export interface LeadRow {
   reply_quote: string | null;
   reply_reason: string | null;
   reply_at: string | null;
+  needle_synced_at: string | null;
+  engagement_stage: string | null;
+  engagement_at: string | null;
   call_card: unknown | null;
   created_at: string;
 }
@@ -342,6 +346,9 @@ export function toLead(row: LeadRow): Lead {
     replyQuote: row.reply_quote ?? null,
     replyReason: row.reply_reason ?? null,
     replyAt: row.reply_at ?? null,
+    needleSyncedAt: row.needle_synced_at ?? null,
+    engagementStage: (row.engagement_stage ?? null) as EngagementStage | null,
+    engagementAt: row.engagement_at ?? null,
     callCard: (row.call_card ?? null) as CallCard | null,
     createdAt: row.created_at,
   };
@@ -571,6 +578,9 @@ export function toInsertLead(
     reply_quote: l.replyQuote,
     reply_reason: l.replyReason,
     reply_at: l.replyAt,
+    needle_synced_at: l.needleSyncedAt,
+    engagement_stage: l.engagementStage,
+    engagement_at: l.engagementAt,
     call_card: l.callCard,
   };
 }

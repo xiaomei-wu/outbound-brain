@@ -14,6 +14,7 @@ import type { CampaignRow, LeadRow, TriggerCatalogRow } from '@/lib/mappers';
 import type { Campaign, CompanyCheck, Lead, TriggerCatalogEntry } from '@/lib/types';
 import { getOrRunCompanyCheck } from '@/lib/claude/icp-check';
 import { generateCallCard } from '@/lib/claude/call-card';
+import { icpNeedleProperties, pushToNeedle } from '@/lib/needle-writeback';
 import { routeForScore, roleMatches, selectCompaniesToCheck } from './routing';
 
 // ---------------------------------------------------------------------------
@@ -167,6 +168,15 @@ async function applyCheckToLeads(
 
     if (updateErr) {
       console.error(`Lead update failed for ${lead.id}:`, updateErr);
+    }
+
+    // Loop back to Needle: the campaign branches on these properties
+    if (lead.needleLeadId) {
+      await pushToNeedle(
+        lead.id,
+        lead.needleLeadId,
+        icpNeedleProperties(check, roleMatches(lead.role, campaign.icpRoles), new Date()),
+      );
     }
 
     // Replace earlier ICP signals that have no call feedback yet (feedback feeds the learning loop)

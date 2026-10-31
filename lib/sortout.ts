@@ -10,6 +10,7 @@ import { getDb } from '@/lib/db';
 import { buildSuppression, sortoutExpiry } from '@/lib/icp/routing';
 import { toLead, type LeadRow } from '@/lib/mappers';
 import { createSuppression } from '@/lib/needle';
+import { pushToNeedle } from '@/lib/needle-writeback';
 import type { SortoutStatus } from '@/lib/types';
 
 export interface SortoutResult {
@@ -83,6 +84,19 @@ export async function applySortout(
           .or('sortout_status.is.null,sortout_status.neq.opt_out')
       : await query.eq('id', leadId);
   if (error) throw new Error('Status konnte nicht gespeichert werden.');
+
+  // Loop back to Needle: the campaign's routing properties follow the SDR's decision
+  if (status === 'not_a_fit' || status === 'wrong_contact') {
+    const patch: Record<string, string> = status === 'not_a_fit'
+      ? { test_company_qualified: 'false', test_person_qualified: 'false', ob_sortout: 'Kein Zielkunde' }
+      : { test_person_qualified: 'false', ob_sortout: 'Falscher Ansprechpartner' };
+    const { data: targets } = status === 'not_a_fit' && lead.companyKey
+      ? await db.from('lead').select('id, needle_lead_id').eq('company_key', lead.companyKey).not('needle_lead_id', 'is', null)
+      : { data: lead.needleLeadId ? [{ id: lead.id, needle_lead_id: lead.needleLeadId }] : [] };
+    for (const t of (targets ?? []) as { id: string; needle_lead_id: string }[]) {
+      await pushToNeedle(t.id, t.needle_lead_id, patch);
+    }
+  }
 
   let message: string;
   if (!status) message = 'Status zurückgesetzt (nur lokal).';

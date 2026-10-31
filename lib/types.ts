@@ -32,6 +32,8 @@ export type LeadOrigin =
 export type IcpScore = 'A' | 'B' | 'C' | 'D' | 'nicht_bewertbar';
 export type SortoutStatus = 'not_a_fit' | 'wrong_contact' | 'not_now' | 'opt_out';
 /** What a lead's own written reply (LinkedIn via Needle, or a pasted chat) says. */
+/** How far a lead got in the Needle campaign (LinkedIn has no read receipts). */
+export type EngagementStage = 'invited' | 'connected' | 'messaged' | 'replied';
 export type ReplySignal =
   | 'call_request' | 'interested' | 'later' | 'not_interested'
   | 'opt_out' | 'wrong_contact' | 'disqualifier' | 'neutral';
@@ -285,6 +287,9 @@ export interface Lead {
   replyQuote: string | null;     // the person's own words the signal is based on
   replyReason: string | null;
   replyAt: string | null;
+  needleSyncedAt: string | null; // ICP result written to the Needle lead's properties
+  engagementStage: EngagementStage | null;
+  engagementAt: string | null;
   callCard: CallCard | null;
   createdAt: string;
 }

@@ -37,6 +37,9 @@ const READ_TOOLS = new Set([
 /** Write tools — only suppressions. All others are forbidden. */
 const SUPPRESSION_TOOLS = new Set(['needleCreateSuppressions']);
 
+/** Reading a lead and writing its custom properties (ICP result for campaign routing). Never messages. */
+const LEAD_PROPERTY_TOOLS = new Set(['needleGetLead', 'needleUpdateLead']);
+
 // ---------------------------------------------------------------------------
 // Output types
 // ---------------------------------------------------------------------------
@@ -505,4 +508,22 @@ export async function searchCampaignEvents(
     cursor = data.nextCursor ?? undefined;
   } while (cursor && events.length < max);
   return events;
+}
+
+/**
+ * Sets custom properties on a Needle lead without losing the others.
+ * Needle replaces ALL properties on update (verified 2026-10-31), so this reads the lead,
+ * merges the patch in and writes the full set back. Only `properties` is ever sent.
+ */
+export async function mergeLeadProperties(needleLeadId: string, patch: Record<string, string>): Promise<void> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleGetLead', { leadId: needleLeadId }, LEAD_PROPERTY_TOOLS);
+  const data = extractData<{ lead?: { properties?: Record<string, string> } }>(raw);
+  const merged = mergeProperties(data.lead?.properties ?? {}, patch);
+  await mcpCall(key, 'needleUpdateLead', { leadId: needleLeadId, properties: merged }, LEAD_PROPERTY_TOOLS);
+}
+
+/** Pure merge: existing keys stay, patched keys win. */
+export function mergeProperties(existing: Record<string, string>, patch: Record<string, string>): Record<string, string> {
+  return { ...existing, ...patch };
 }

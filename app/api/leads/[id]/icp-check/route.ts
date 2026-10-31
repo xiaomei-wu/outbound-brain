@@ -12,6 +12,7 @@ import type { CampaignRow, LeadRow, TriggerCatalogRow } from '@/lib/mappers';
 import { getOrRunCompanyCheck } from '@/lib/claude/icp-check';
 import { generateCallCard } from '@/lib/claude/call-card';
 import { routeForScore, roleMatches } from '@/lib/icp/routing';
+import { icpNeedleProperties, pushToNeedle } from '@/lib/needle-writeback';
 
 export async function POST(
   request: Request,
@@ -81,6 +82,11 @@ export async function POST(
         call_card: callCard,
       })
       .eq('id', id);
+
+    // Loop back to Needle: the campaign branches on these properties
+    if (lead.needleLeadId) {
+      await pushToNeedle(id, lead.needleLeadId, icpNeedleProperties(check, roleMatches(lead.role, campaign.icpRoles), new Date()));
+    }
 
     // Write lead_trigger rows for fit signals
     const { data: catalogRows } = await db

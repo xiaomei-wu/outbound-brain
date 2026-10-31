@@ -50,6 +50,7 @@ import { PriorityBadge } from '@/components/priority-badge';
 import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
 import { ReplyBadge } from '@/components/reply-badge';
+import { EngagementBadge } from '@/components/engagement-badge';
 import { ReplyPanel } from '@/components/reply-panel';
 import { IcpPanel, IcpCheckButton } from '@/components/icp-panel';
 import { CallCard } from '@/components/call-card';
@@ -268,6 +269,12 @@ export default async function LeadPage({ params, searchParams }: LeadPageProps) 
                   <OriginBadge origin={lead.origin} detail={lead.originDetail} />
                   <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
                   <ReplyBadge signal={lead.replySignal} />
+                  <EngagementBadge stage={lead.engagementStage} hasReplySignal={Boolean(lead.replySignal && lead.replySignal !== 'neutral')} />
+                  {lead.needleSyncedAt && (
+                    <span className="text-[10px] text-muted-foreground" title="ICP-Ergebnis als Lead-Eigenschaften in Needle hinterlegt (test_company_qualified / test_person_qualified)">
+                      ICP an Needle übertragen
+                    </span>
+                  )}
 
                   {lead.role && (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">

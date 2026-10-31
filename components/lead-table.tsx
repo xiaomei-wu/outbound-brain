@@ -30,6 +30,8 @@ import { PriorityBadge } from '@/components/priority-badge';
 import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
 import { ReplyBadge } from '@/components/reply-badge';
+import { EngagementBadge } from '@/components/engagement-badge';
+import { engagementRank } from '@/lib/reply-routing';
 import { LeadSources } from '@/components/lead-sources';
 import type { FindResult } from '@/lib/lead-find';
 import type {
@@ -80,6 +82,10 @@ function sortLeads(leads: Lead[]): Lead[] {
     const pA = PRIORITY_ORDER[a.priority] ?? 99;
     const pB = PRIORITY_ORDER[b.priority] ?? 99;
     if (pA !== pB) return pA - pB;
+    // Warmer campaign contacts first (replied > messaged > connected > invited)
+    const eA = engagementRank(a.engagementStage);
+    const eB = engagementRank(b.engagementStage);
+    if (eA !== eB) return eB - eA;
     // Callable leads (number, not do-not-call) first within the same priority
     const cA = a.phone && !a.phoneDnc ? 0 : 1;
     const cB = b.phone && !b.phoneDnc ? 0 : 1;
@@ -637,6 +643,7 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
           <OriginBadge origin={lead.origin} detail={lead.originDetail} />
           <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
           <ReplyBadge signal={lead.replySignal} />
+          <EngagementBadge stage={lead.engagementStage} hasReplySignal={Boolean(lead.replySignal && lead.replySignal !== 'neutral')} />
         </div>
 
         {/* Why-now / trigger */}

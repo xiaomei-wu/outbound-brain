@@ -3,7 +3,7 @@
  * lead_context rows, and decide what a reply signal does to ranking and sort-out.
  */
 
-import type { Priority, ReplySignal, SortoutStatus, WillingnessStatus } from '@/lib/types';
+import type { EngagementStage, Priority, ReplySignal, SortoutStatus, WillingnessStatus } from '@/lib/types';
 
 /** Public LinkedIn identifier from a profile URL ("…/in/erika-muster-123/" → "erika-muster-123"). */
 export function normalizeLinkedinUrl(url: string | null | undefined): string | null {
@@ -76,7 +76,7 @@ export function replyEffect(signal: ReplySignal): {
     case 'call_request':
       return { priority: 'high', willingness: 'requested', suggested: null };
     case 'interested':
-      return { priority: null, willingness: 'open', suggested: null };
+      return { priority: 'high', willingness: 'open', suggested: null };
     case 'later':
     case 'not_interested':
       return { priority: 'low', willingness: null, suggested: 'not_now' };
@@ -89,4 +89,28 @@ export function replyEffect(signal: ReplySignal): {
     default:
       return { priority: null, willingness: null, suggested: null };
   }
+}
+
+const STAGE_BY_EVENT: Record<string, EngagementStage> = {
+  linkedin_invite_sent: 'invited',
+  linkedin_invite_accepted: 'connected',
+  linkedin_message_sent: 'messaged',
+  linkedin_message_received: 'replied',
+};
+
+const STAGE_ORDER: EngagementStage[] = ['invited', 'connected', 'messaged', 'replied'];
+
+/** Campaign stage a Needle event shows; null for events that say nothing about engagement. */
+export function engagementFromEvent(type: string | undefined): EngagementStage | null {
+  return (type && STAGE_BY_EVENT[type]) || null;
+}
+
+/** 0 = no campaign contact yet; higher = warmer. LinkedIn exposes no read receipts. */
+export function engagementRank(stage: EngagementStage | null): number {
+  return stage ? STAGE_ORDER.indexOf(stage) + 1 : 0;
+}
+
+/** Stages only move forward (a later "invite sent" never undoes "replied"). */
+export function laterStage(current: EngagementStage | null, next: EngagementStage): EngagementStage {
+  return engagementRank(next) > engagementRank(current) ? next : (current ?? next);
 }

@@ -9,10 +9,12 @@ import { classifyConversation } from '@/lib/claude/reply-signal';
 import { getDb } from '@/lib/db';
 import { routeForScore } from '@/lib/icp/routing';
 import { searchCampaignEvents, type NeedleEvent } from '@/lib/needle';
-import { eventToContextRow, matchEventToLead, replyEffect } from '@/lib/reply-routing';
-import type { IcpScore, ReplySignal } from '@/lib/types';
+import { engagementFromEvent, eventToContextRow, laterStage, matchEventToLead, replyEffect } from '@/lib/reply-routing';
+import type { EngagementStage, IcpScore, ReplySignal } from '@/lib/types';
 
 export const MESSAGE_EVENT_TYPES = ['linkedin_message_received', 'linkedin_message_sent'];
+/** Everything the campaign does with a lead that says how warm it is (no read receipts exist). */
+export const CAMPAIGN_EVENT_TYPES = [...MESSAGE_EVENT_TYPES, 'linkedin_invite_sent', 'linkedin_invite_accepted'];
 
 const SIGNAL_LABEL: Record<ReplySignal, string> = {
   call_request: 'Gesprächswunsch',
@@ -34,11 +36,26 @@ export async function ingestMessageEvents(events: NeedleEvent[]): Promise<string
   const db = getDb();
   const { data } = await db
     .from('lead')
-    .select('id, needle_lead_id, profile_url')
+    .select('id, needle_lead_id, profile_url, engagement_stage')
     .eq('is_test', false);
-  const leads = ((data ?? []) as { id: string; needle_lead_id: string | null; profile_url: string | null }[]).map(
-    (l) => ({ id: l.id, needleLeadId: l.needle_lead_id, profileUrl: l.profile_url }),
+  const rowsById = new Map(
+    ((data ?? []) as { id: string; needle_lead_id: string | null; profile_url: string | null; engagement_stage: EngagementStage | null }[]).map((l) => [l.id, l]),
   );
+  const leads = [...rowsById.values()].map((l) => ({ id: l.id, needleLeadId: l.needle_lead_id, profileUrl: l.profile_url }));
+
+  // Campaign engagement: the furthest stage per lead, only ever moving forward
+  const stages = new Map<string, { stage: EngagementStage; at: string }>();
+  for (const e of events) {
+    const stage = engagementFromEvent(e.type);
+    const leadId = stage ? matchEventToLead(e, leads) : null;
+    if (!stage || !leadId) continue;
+    const current = stages.get(leadId)?.stage ?? rowsById.get(leadId)?.engagement_stage ?? null;
+    const next = laterStage(current, stage);
+    if (next !== current) stages.set(leadId, { stage: next, at: e.occurredAt ?? new Date().toISOString() });
+  }
+  for (const [leadId, { stage, at }] of stages) {
+    await db.from('lead').update({ engagement_stage: stage, engagement_at: at }).eq('id', leadId);
+  }
 
   const rows = events
     .map((e) => {
@@ -104,7 +121,7 @@ export async function analyzeLeadReplies(leadId: string): Promise<ReplySignal | 
 
 /** Pulls recent LinkedIn messages from Needle, stores new ones and re-evaluates those leads. */
 export async function syncNeedleReplies(): Promise<{ events: number; leadsUpdated: number }> {
-  const events = await searchCampaignEvents(null, MESSAGE_EVENT_TYPES, 500);
+  const events = await searchCampaignEvents(null, CAMPAIGN_EVENT_TYPES, 500);
   const leadIds = await ingestMessageEvents(events);
   for (const id of leadIds) {
     try {

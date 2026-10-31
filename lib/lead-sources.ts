@@ -225,6 +225,9 @@ export async function importAiArkLeads(apiKey: string): Promise<AiArkImportResul
       replyQuote: null,
       replyReason: null,
       replyAt: null,
+      needleSyncedAt: null,
+      engagementStage: null,
+      engagementAt: null,
     });
 
     const { data: existing } = await db

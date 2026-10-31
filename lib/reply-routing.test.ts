@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventToContextRow, matchEventToLead, normalizeLinkedinUrl, replyEffect } from './reply-routing';
+import { engagementFromEvent, engagementRank, eventToContextRow, laterStage, matchEventToLead, normalizeLinkedinUrl, replyEffect } from './reply-routing';
 
 describe('normalizeLinkedinUrl', () => {
   it('reduces profile URLs to the public identifier', () => {
@@ -55,8 +55,35 @@ describe('replyEffect', () => {
     expect(replyEffect('wrong_contact')).toEqual({ priority: null, willingness: null, suggested: 'wrong_contact' });
   });
 
-  it('leaves ranking unchanged for neutral replies', () => {
+  it('leaves ranking unchanged for neutral replies; interest raises it', () => {
     expect(replyEffect('neutral')).toEqual({ priority: null, willingness: null, suggested: null });
-    expect(replyEffect('interested')).toEqual({ priority: null, willingness: 'open', suggested: null });
+    expect(replyEffect('interested')).toEqual({ priority: 'high', willingness: 'open', suggested: null });
+  });
+});
+
+describe('engagement', () => {
+  it('maps campaign events to stages', () => {
+    expect(engagementFromEvent('linkedin_invite_sent')).toBe('invited');
+    expect(engagementFromEvent('linkedin_invite_accepted')).toBe('connected');
+    expect(engagementFromEvent('linkedin_message_sent')).toBe('messaged');
+    expect(engagementFromEvent('linkedin_message_received')).toBe('replied');
+    expect(engagementFromEvent('linkedin_profile_visited')).toBeNull();
+  });
+
+  it('only moves forward', () => {
+    expect(laterStage('replied', 'messaged')).toBe('replied');
+    expect(laterStage('invited', 'connected')).toBe('connected');
+    expect(laterStage(null, 'invited')).toBe('invited');
+  });
+
+  it('ranks warmer leads first', () => {
+    expect(engagementRank('replied')).toBeGreaterThan(engagementRank('messaged'));
+    expect(engagementRank('messaged')).toBeGreaterThan(engagementRank('connected'));
+    expect(engagementRank('connected')).toBeGreaterThan(engagementRank('invited'));
+    expect(engagementRank('invited')).toBeGreaterThan(engagementRank(null));
+  });
+
+  it('raises interested replies to high', () => {
+    expect(replyEffect('interested').priority).toBe('high');
   });
 });
