@@ -29,6 +29,12 @@
     },
     "app/api/leads/phone-lookup-all/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/leads/sync-replies/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/webhooks/needle/route.ts": {
+      "maxDuration": 60
     }
   }
 }

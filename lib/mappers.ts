@@ -4,6 +4,7 @@
  */
 
 import type {
+  ReplySignal,
   CallCard,
   CompanyCheck,
   IcpScore,
@@ -119,6 +120,10 @@ export interface LeadRow {
   phone_source: string | null;
   phone_dnc: boolean;
   phone_lookup_at: string | null;
+  reply_signal: string | null;
+  reply_quote: string | null;
+  reply_reason: string | null;
+  reply_at: string | null;
   call_card: unknown | null;
   created_at: string;
 }
@@ -333,6 +338,10 @@ export function toLead(row: LeadRow): Lead {
     phoneSource: row.phone_source ?? null,
     phoneDnc: row.phone_dnc ?? false,
     phoneLookupAt: row.phone_lookup_at ?? null,
+    replySignal: (row.reply_signal ?? null) as ReplySignal | null,
+    replyQuote: row.reply_quote ?? null,
+    replyReason: row.reply_reason ?? null,
+    replyAt: row.reply_at ?? null,
     callCard: (row.call_card ?? null) as CallCard | null,
     createdAt: row.created_at,
   };
@@ -558,6 +567,10 @@ export function toInsertLead(
     phone_source: l.phoneSource,
     phone_dnc: l.phoneDnc,
     phone_lookup_at: l.phoneLookupAt,
+    reply_signal: l.replySignal,
+    reply_quote: l.replyQuote,
+    reply_reason: l.replyReason,
+    reply_at: l.replyAt,
     call_card: l.callCard,
   };
 }

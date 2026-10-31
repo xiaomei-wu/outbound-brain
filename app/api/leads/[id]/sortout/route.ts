@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { getDb } from '@/lib/db';
 import { applySortout } from '@/lib/sortout';
 
 const SortoutBody = z.object({
@@ -14,7 +15,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return Response.json({ error: 'Ungültiger Status.' }, { status: 400 });
   }
   if (parsed.data.status === 'opt_out') {
-    return Response.json({ error: 'Opt-out nur aus dem Gesprächsergebnis.' }, { status: 400 });
+    // Opt-out only when the person said so: in the call (outcome route) or in writing
+    const { data: lead } = await getDb().from('lead').select('reply_signal').eq('id', id).single();
+    if ((lead as { reply_signal: string | null } | null)?.reply_signal !== 'opt_out') {
+      return Response.json({ error: 'Opt-out nur, wenn die Person es selbst sagt (Gespräch oder Nachricht).' }, { status: 400 });
+    }
   }
 
   try {

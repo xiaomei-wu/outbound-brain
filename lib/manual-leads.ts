@@ -8,7 +8,8 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { toLead } from '@/lib/mappers';
 import type { LeadRow } from '@/lib/mappers';
-import type { Lead, ContextKind, PriorityResult } from '@/lib/types';
+import type { Lead, ContextKind, FitStatus, NeedStatus, Priority, PriorityResult, WillingnessStatus } from '@/lib/types';
+import { analyzeLeadReplies } from '@/lib/needle-replies';
 import { refreshLeadPriority } from '@/lib/priority';
 
 // ---------------------------------------------------------------------------
@@ -261,7 +262,29 @@ export async function addContext(
   // Clear cached_brief so the next brief re-uses new context
   await db.from('lead').update({ cached_brief: null }).eq('id', leadId);
 
-  const priority = await refreshLeadPriority(leadId);
+  // Leads with an ICP check keep its ranking; the legacy trigger scoring would overwrite it
+  const { data: keyRow } = await db.from('lead').select('company_key').eq('id', leadId).single();
+  const companyKey = (keyRow as { company_key: string | null } | null)?.company_key ?? null;
+  const { data: check } = companyKey
+    ? await db.from('company_check').select('id').eq('company_key', companyKey).maybeSingle()
+    : { data: null };
+  if (!check) await refreshLeadPriority(leadId);
+
+  if (input.kind !== 'note') await analyzeLeadReplies(leadId);
+
+  const { data: updated } = await db
+    .from('lead')
+    .select('priority, priority_reason, fit_status, need_status, willingness')
+    .eq('id', leadId)
+    .single();
+  const u = updated as { priority: Priority; priority_reason: string; fit_status: FitStatus; need_status: NeedStatus; willingness: WillingnessStatus };
+  const priority: PriorityResult = {
+    priority: u.priority,
+    reason: u.priority_reason,
+    fitStatus: u.fit_status,
+    needStatus: u.need_status,
+    willingness: u.willingness,
+  };
 
   return { added: rows.length, priority };
 }

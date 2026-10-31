@@ -31,6 +31,7 @@ const READ_TOOLS = new Set([
   'needleListLinkedinConversationMessages',
   'needleListCampaigns',
   'needleListCampaignLeads',
+  'needleSearchEvents',
 ]);
 
 /** Write tools — only suppressions. All others are forbidden. */
@@ -469,4 +470,39 @@ export async function listCampaignLeads(
 export async function createSuppression(entry: NeedleSuppressionEntry): Promise<void> {
   const key = await resolveKey();
   await mcpCall(key, 'needleCreateSuppressions', { entries: [entry] }, SUPPRESSION_TOOLS);
+}
+
+/** One Needle event (campaign activity: messages, invites, replies). Shape verified 2026-10-31. */
+export interface NeedleEvent {
+  id: string;
+  type: string;
+  createdAt?: string;
+  occurredAt?: string;
+  leadId?: string | null;
+  campaignId?: string | null;
+  data?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+/** Searches campaign events of the given types (read-only), newest pages first, up to `max` events. */
+export async function searchCampaignEvents(
+  campaignId: string | null,
+  types: string[],
+  max = 500,
+): Promise<NeedleEvent[]> {
+  const key = await resolveKey();
+  const events: NeedleEvent[] = [];
+  let cursor: string | undefined;
+  do {
+    const raw = await mcpCall(key, 'needleSearchEvents', {
+      ...(campaignId ? { campaignId } : {}),
+      types,
+      limit: 100,
+      ...(cursor ? { cursor } : {}),
+    });
+    const data = extractData<{ events?: NeedleEvent[]; nextCursor?: string | null }>(raw);
+    events.push(...(data.events ?? []));
+    cursor = data.nextCursor ?? undefined;
+  } while (cursor && events.length < max);
+  return events;
 }

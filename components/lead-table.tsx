@@ -10,6 +10,7 @@ import {
   UsersIcon,
   SearchIcon,
   PhoneIcon,
+  MessageCircleIcon,
   FileTextIcon,
   RotateCcwIcon,
   ChevronRightIcon,
@@ -28,6 +29,7 @@ import { SimulateEvent } from '@/components/simulate-event';
 import { PriorityBadge } from '@/components/priority-badge';
 import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
+import { ReplyBadge } from '@/components/reply-badge';
 import { LeadSources } from '@/components/lead-sources';
 import type { FindResult } from '@/lib/lead-find';
 import type {
@@ -49,10 +51,11 @@ type OuterTab = 'real' | 'sortout' | 'demo';
 // Inner tab: priority/status filter within real leads
 // ---------------------------------------------------------------------------
 
-type InnerTab = 'heute' | 'mit_nummer' | 'pruefen' | 'spaeter' | 'gestoppt';
+type InnerTab = 'heute' | 'antworten' | 'mit_nummer' | 'pruefen' | 'spaeter' | 'gestoppt';
 
 const INNER_TABS: { id: InnerTab; label: string }[] = [
   { id: 'heute', label: 'Heute' },
+  { id: 'antworten', label: 'Antworten' },
   { id: 'mit_nummer', label: 'Mit Nummer' },
   { id: 'pruefen', label: 'Prüfen' },
   { id: 'spaeter', label: 'Später' },
@@ -94,6 +97,8 @@ function filterInner(leads: Lead[], tab: InnerTab): Lead[] {
       return leads.filter(
         (l) => ACTIVE_STATUSES.includes(l.status) && l.priority !== 'review'
       );
+    case 'antworten':
+      return leads.filter((l) => l.replySignal && l.replySignal !== 'neutral');
     case 'mit_nummer':
       return leads.filter((l) => l.phone && !l.phoneDnc && ACTIVE_STATUSES.includes(l.status));
     case 'pruefen':
@@ -191,6 +196,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
   const [isGeneratingBriefs, startGenerateBriefs] = useTransition();
   const [isResetting, startReset] = useTransition();
   const [isFindingPhones, startFindPhones] = useTransition();
+  const [isSyncingReplies, startSyncReplies] = useTransition();
 
   // Partition leads into three views
   const realLeads   = leads.filter((l) => !l.isTest && l.sortoutStatus === null);
@@ -221,6 +227,24 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
         setShowFindDialog(false);
+      }
+    });
+  }
+
+  /** Pulls LinkedIn replies from Needle (fallback for the webhook) and re-ranks those leads. */
+  function handleSyncReplies() {
+    startSyncReplies(async () => {
+      try {
+        const res = await fetch('/api/leads/sync-replies', { method: 'POST' });
+        const data: { message?: string; error?: string } = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? 'Antworten konnten nicht abgerufen werden.');
+          return;
+        }
+        toast.info(data.message ?? 'Antworten abgerufen.');
+        router.refresh();
+      } catch {
+        toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
     });
   }
@@ -297,7 +321,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
     });
   }
 
-  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting || isFindingPhones;
+  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting || isFindingPhones || isSyncingReplies;
 
   return (
     <div className="flex flex-col h-full">
@@ -335,6 +359,18 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
         >
           {isFindingPhones ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <PhoneIcon className="h-3 w-3" />}
           Nummern suchen
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSyncReplies}
+          disabled={anyBusy}
+          className="text-xs"
+          title="LinkedIn-Antworten aus Needle holen (kommen sonst automatisch per Webhook)"
+        >
+          {isSyncingReplies ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <MessageCircleIcon className="h-3 w-3" />}
+          Antworten abrufen
         </Button>
 
         <Button
@@ -600,6 +636,7 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
         <div className="flex flex-wrap items-center gap-1.5">
           <OriginBadge origin={lead.origin} detail={lead.originDetail} />
           <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
+          <ReplyBadge signal={lead.replySignal} />
         </div>
 
         {/* Why-now / trigger */}
@@ -654,6 +691,7 @@ function SortedOutRow({ lead }: { lead: Lead }) {
         <div className="flex items-center gap-1.5 flex-wrap">
           <OriginBadge origin={lead.origin} detail={lead.originDetail} />
           <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
+          <ReplyBadge signal={lead.replySignal} />
           <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
             {statusLabel}
           </span>

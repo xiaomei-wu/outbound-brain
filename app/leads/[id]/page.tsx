@@ -49,6 +49,8 @@ import { SlackFallbackCard } from '@/components/slack-fallback-card';
 import { PriorityBadge } from '@/components/priority-badge';
 import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
+import { ReplyBadge } from '@/components/reply-badge';
+import { ReplyPanel } from '@/components/reply-panel';
 import { IcpPanel, IcpCheckButton } from '@/components/icp-panel';
 import { CallCard } from '@/components/call-card';
 
@@ -265,6 +267,7 @@ export default async function LeadPage({ params, searchParams }: LeadPageProps) 
                   {/* Origin badge in header */}
                   <OriginBadge origin={lead.origin} detail={lead.originDetail} />
                   <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
+                  <ReplyBadge signal={lead.replySignal} />
 
                   {lead.role && (
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -302,6 +305,20 @@ export default async function LeadPage({ params, searchParams }: LeadPageProps) 
 
           {/* Scrollable: ICP panel + brief + triggers */}
           <div className="flex-1 overflow-y-auto px-6 pb-6">
+            {/* The contact's own written reply (Needle LinkedIn or pasted chat) */}
+            {lead.replySignal && lead.replySignal !== 'neutral' && (
+              <div className="mb-5">
+                <ReplyPanel
+                  leadId={lead.id}
+                  signal={lead.replySignal}
+                  quote={lead.replyQuote}
+                  reason={lead.replyReason}
+                  at={lead.replyAt}
+                  sortoutStatus={lead.sortoutStatus}
+                />
+              </div>
+            )}
+
             {/* ICP panel (above the existing brief) */}
             {companyCheck && routeInfo ? (
               <div className="mb-5">

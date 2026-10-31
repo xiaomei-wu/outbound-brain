@@ -4,6 +4,7 @@
  * ?force=1 bypasses the company_check cache.
  */
 
+import { replyEffect } from '@/lib/reply-routing';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { toLead, toCampaign, toTriggerCatalogEntry } from '@/lib/mappers';
@@ -72,9 +73,11 @@ export async function POST(
       .from('lead')
       .update({
         company_key: check.companyKey,
-        priority: route.priority,
+        // A written reply outranks the ICP score (see lib/needle-replies.ts)
+        ...(lead.replySignal && replyEffect(lead.replySignal).priority
+          ? {}
+          : { priority: route.priority, priority_reason: check.decisionReason }),
         fit_status: route.fitStatus,
-        priority_reason: check.decisionReason,
         call_card: callCard,
       })
       .eq('id', id);

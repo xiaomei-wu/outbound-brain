@@ -59,6 +59,10 @@ export function mapCampaignLead(l: NeedleCampaignLead, campaignName: string): Ne
     phone_dnc: false,
     call_card: null,
     phone_lookup_at: null,
+    reply_signal: null,
+    reply_quote: null,
+    reply_reason: null,
+    reply_at: null,
   };
 }
 

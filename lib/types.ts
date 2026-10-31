@@ -31,6 +31,10 @@ export type LeadOrigin =
   | 'csv' | 'manual' | 'prepared' | 'test';
 export type IcpScore = 'A' | 'B' | 'C' | 'D' | 'nicht_bewertbar';
 export type SortoutStatus = 'not_a_fit' | 'wrong_contact' | 'not_now' | 'opt_out';
+/** What a lead's own written reply (LinkedIn via Needle, or a pasted chat) says. */
+export type ReplySignal =
+  | 'call_request' | 'interested' | 'later' | 'not_interested'
+  | 'opt_out' | 'wrong_contact' | 'disqualifier' | 'neutral';
 
 export interface IcpSignal {
   text: string;
@@ -277,6 +281,10 @@ export interface Lead {
   phoneSource: string | null;    // 'lusha' | 'ai_ark' | 'blitz' | 'manuell' | …
   phoneDnc: boolean;
   phoneLookupAt: string | null;  // cheaper phone chain tried without a hit → offer Lusha
+  replySignal: ReplySignal | null;
+  replyQuote: string | null;     // the person's own words the signal is based on
+  replyReason: string | null;
+  replyAt: string | null;
   callCard: CallCard | null;
   createdAt: string;
 }

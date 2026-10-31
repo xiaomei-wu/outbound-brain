@@ -2,7 +2,7 @@
  * POST /api/leads/find
  *
  * Unified "Leads finden" endpoint: runs every connected lead source in order
- *   1. Needle campaign  (syncNeedleCampaign)
+ *   1. Needle campaign  (syncNeedleCampaign; LinkedIn replies via syncNeedleReplies after the response)
  *   2. BlitzAPI         (findBlitzLeads)
  *   3. AI Ark           (importAiArkLeads)
  *
@@ -19,6 +19,7 @@
 import { after } from 'next/server';
 import { getCredentials } from '@/lib/connectors';
 import { syncNeedleCampaign } from '@/lib/needle-sync';
+import { syncNeedleReplies } from '@/lib/needle-replies';
 import { findBlitzLeads, importAiArkLeads } from '@/lib/lead-sources';
 import { scheduleIcpChecks } from '@/lib/icp/schedule';
 import { summarizeFind, type FindResult } from '@/lib/lead-find';
@@ -61,6 +62,12 @@ export async function POST() {
         message: `Needle: ${human}`,
       });
     }
+    // New LinkedIn replies are evaluated in the background (Claude per conversation)
+    after(() =>
+      syncNeedleReplies().catch((e: unknown) =>
+        console.error('[find] reply sync failed', e instanceof Error ? e.message : e),
+      ),
+    );
   }
 
   // ------------------------------------------------------------------

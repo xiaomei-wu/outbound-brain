@@ -7,6 +7,7 @@
  * ICP fit signals (it looks for 'Geaeusserter Bedarf' etc.).
  */
 
+import { replyEffect } from '@/lib/reply-routing';
 import { getDb } from '@/lib/db';
 import { toLead, toCampaign, toTriggerCatalogEntry } from '@/lib/mappers';
 import type { CampaignRow, LeadRow, TriggerCatalogRow } from '@/lib/mappers';
@@ -155,9 +156,11 @@ async function applyCheckToLeads(
     const { error: updateErr } = await db
       .from('lead')
       .update({
-        priority: route.priority,
+        // A written reply outranks the ICP score (see lib/needle-replies.ts)
+        ...(lead.replySignal && replyEffect(lead.replySignal).priority
+          ? {}
+          : { priority: route.priority, priority_reason: check.decisionReason }),
         fit_status: route.fitStatus,
-        priority_reason: check.decisionReason,
         call_card: callCard,
       })
       .eq('id', lead.id);
