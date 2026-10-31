@@ -58,6 +58,10 @@ export async function POST(
 
   const campaign = toCampaign(campaignRow as CampaignRow);
 
+  const setStatus = (status: 'running' | 'failed' | null) =>
+    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString() }).eq('id', id);
+  await setStatus('running');
+
   try {
     // Run or retrieve the company check
     const check = await getOrRunCompanyCheck(lead, campaign, force);
@@ -154,6 +158,7 @@ export async function POST(
       }
     }
 
+    await setStatus(null);
     return NextResponse.json({
       check,
       callCard,
@@ -161,6 +166,7 @@ export async function POST(
     });
   } catch (err) {
     console.error('POST /api/leads/[id]/icp-check error:', err);
+    await setStatus('failed');
     return NextResponse.json(
       {
         error:

@@ -95,6 +95,12 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
   // Select companies to check (max 10)
   const toCheck = selectCompaniesToCheck(leads, alreadyChecked, 10);
 
+  // Visible progress: queued → running → cleared after the Needle write-back (or failed)
+  const idsFor = (key: string) => leads.filter((l) => l.companyKey === key).map((l) => l.id);
+  const setStatus = (ids: string[], status: 'queued' | 'running' | 'failed' | null) =>
+    db.from('lead').update({ icp_status: status, icp_status_at: new Date().toISOString() }).in('id', ids);
+  await setStatus(toCheck.flatMap(idsFor), 'queued');
+
   // Run checks CHECK_CONCURRENCY at a time: ~60 s each, and 10 sequential checks
   // would exceed Vercel's 300 s function limit (after() shares it)
   async function checkCompany(key: string) {
@@ -102,11 +108,15 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
     const representative = companyLeads[0];
     if (!representative) return;
 
+    const ids = companyLeads.map((l) => l.id);
+    await setStatus(ids, 'running');
     try {
       const check = await getOrRunCompanyCheck(representative, campaign);
       await applyCheckToLeads(companyLeads, check, campaign, catalog, db);
+      await setStatus(ids, null);
     } catch (err) {
       console.error(`ICP check failed for ${key}:`, err);
+      await setStatus(ids, 'failed');
       // Continue with next company
     }
   }

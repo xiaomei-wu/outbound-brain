@@ -31,7 +31,9 @@ import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
 import { ReplyBadge } from '@/components/reply-badge';
 import { EngagementBadge } from '@/components/engagement-badge';
-import { compareLeads, hasTouchpoint } from '@/lib/lead-ranking';
+import { compareLeads, countBySource, filterBySource, hasTouchpoint, SOURCE_ORDER, sortLeadsBy, type SortMode, type SourceFilter } from '@/lib/lead-ranking';
+import { originLabel } from '@/lib/origin';
+import { IcpStatusChip } from '@/components/icp-status-chip';
 import { LeadSources } from '@/components/lead-sources';
 import type { FindResult } from '@/lib/lead-find';
 import type {
@@ -65,6 +67,9 @@ const INNER_TABS: { id: InnerTab; label: string }[] = [
 ];
 
 const ACTIVE_STATUSES: Lead['status'][] = ['new', 'researched', 'briefed', 'calling'];
+
+/** Background work starts after the response; one later refresh shows its progress. */
+const BACKGROUND_REFRESH_MS = 2500;
 
 // ---------------------------------------------------------------------------
 // Priority sort helpers
@@ -164,13 +169,17 @@ const SORTOUT_LABEL: Record<string, string> = {
 interface LeadTableProps {
   leads: Lead[];
   triggersMap: Record<string, LeadTrigger | null>;
+  /** lead id → ICP score, for sorting by ICP */
+  icpScores: Record<string, string>;
   hasNeedle: boolean;
   hasBlitz: boolean;
   hasAiArk: boolean;
 }
 
-export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }: LeadTableProps) {
+export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, hasAiArk }: LeadTableProps) {
   const router = useRouter();
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
+  const [sortMode, setSortMode] = useState<SortMode>('recommended');
   const [outerTab, setOuterTab] = useState<OuterTab>('real');
   const [innerTab, setInnerTab] = useState<InnerTab>('heute');
   const [showResetDialog, setShowResetDialog] = useState(false);
@@ -189,7 +198,8 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
   const sortedOut   = leads.filter((l) => l.sortoutStatus !== null);
   const demoLeads   = leads.filter((l) => l.isTest);
 
-  const sorted = sortLeads(realLeads);
+  const sourceCounts = countBySource(realLeads);
+  const sorted = sortLeadsBy(filterBySource(realLeads, sourceFilter), sortMode, new Map(Object.entries(icpScores)));
   const filteredInner = outerTab === 'real' ? filterInner(sorted, innerTab) : [];
 
   const topLead = outerTab === 'real' && innerTab === 'heute' ? filteredInner[0] ?? null : null;
@@ -210,6 +220,8 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
         }
         setFindResults(data.results ?? null);
         router.refresh();
+        // ICP checks start right after the response; refresh again to show their progress
+        setTimeout(() => router.refresh(), BACKGROUND_REFRESH_MS);
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
         setShowFindDialog(false);
@@ -268,6 +280,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
             ? `${data.scheduled} Firmen werden geprüft — Ergebnisse erscheinen in einigen Minuten.`
             : 'Alle Firmen sind bereits geprüft.',
         );
+        setTimeout(() => router.refresh(), BACKGROUND_REFRESH_MS);
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
@@ -401,7 +414,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
 
       {/* ---- Inner tabs (Echte Leads only) ---- */}
       {outerTab === 'real' && realLeads.length > 0 && (
-        <div className="flex items-center gap-1 px-6 pt-3 pb-0">
+        <div className="flex flex-wrap items-center gap-1 px-4 sm:px-6 pt-3 pb-0">
           {INNER_TABS.map((tab) => {
             const count = filterInner(sorted, tab.id).length;
             return (
@@ -423,6 +436,39 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
               </button>
             );
           })}
+
+          {/* Source filter and sort */}
+          <div className="ml-auto flex flex-wrap items-center gap-2 py-1">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Quelle
+              <select
+                value={sourceFilter}
+                onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+              >
+                <option value="all">Alle ({realLeads.length})</option>
+                {SOURCE_ORDER.filter((origin) => sourceCounts[origin]).map((origin) => (
+                  <option key={origin} value={origin}>
+                    {originLabel(origin, null)} ({sourceCounts[origin]})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              Sortierung
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as SortMode)}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground"
+              >
+                <option value="recommended">Empfohlen</option>
+                <option value="source">Nach Quelle</option>
+                <option value="icp">Nach ICP-Score</option>
+                <option value="newest">Neueste zuerst</option>
+                <option value="company">Firma A–Z</option>
+              </select>
+            </label>
+          </div>
         </div>
       )}
 
@@ -626,6 +672,7 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
           <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
           <ReplyBadge signal={lead.replySignal} />
           <EngagementBadge stage={lead.engagementStage} hasReplySignal={Boolean(lead.replySignal && lead.replySignal !== 'neutral')} />
+          <IcpStatusChip lead={lead} />
         </div>
 
         {/* Why-now / trigger */}

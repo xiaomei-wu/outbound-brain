@@ -4,6 +4,8 @@ import { toLead, toLeadTrigger, type LeadRow, type LeadTriggerRow } from '@/lib/
 import { getCredentials } from '@/lib/connectors';
 import { LeadTable } from '@/components/lead-table';
 import { FunnelLine } from '@/components/funnel-line';
+import { SyncIndicator } from '@/components/sync-indicator';
+import { icpActivity } from '@/lib/icp/status';
 import { DbError } from '@/components/db-error';
 
 export const dynamic = 'force-dynamic';
@@ -11,6 +13,7 @@ export const dynamic = 'force-dynamic';
 interface CockpitData {
   leads: Lead[];
   triggersMap: Record<string, LeadTrigger | null>;
+  icpScores: Record<string, string>;
   hasNeedle: boolean;
   hasBlitz: boolean;
   hasAiArk: boolean;
@@ -21,8 +24,9 @@ async function fetchCockpitData(): Promise<CockpitData | null> {
   try {
     const db = getDb();
 
-    const [leadRes, credsResults] = await Promise.all([
+    const [leadRes, checkRes, credsResults] = await Promise.all([
       db.from('lead').select('*'),
+      db.from('company_check').select('company_key, score'),
       Promise.all([
         getCredentials('needle'),
         getCredentials('blitz'),
@@ -60,9 +64,19 @@ async function fetchCockpitData(): Promise<CockpitData | null> {
 
     const [needleCreds, blitzCreds, aiArkCreds] = credsResults;
 
+    const scoreByCompany = new Map(
+      ((checkRes.data ?? []) as { company_key: string; score: string }[]).map((c) => [c.company_key, c.score]),
+    );
+    const icpScores: Record<string, string> = {};
+    for (const l of leads) {
+      const score = l.companyKey ? scoreByCompany.get(l.companyKey) : undefined;
+      if (score) icpScores[l.id] = score;
+    }
+
     return {
       leads,
       triggersMap,
+      icpScores,
       hasNeedle: needleCreds != null,
       hasBlitz: blitzCreds != null,
       hasAiArk: aiArkCreds != null,
@@ -80,7 +94,8 @@ export default async function CockpitPage() {
   const data = await fetchCockpitData();
   if (!data) return <DbError />;
 
-  const { leads, triggersMap, hasNeedle, hasBlitz, hasAiArk } = data;
+  const { leads, triggersMap, icpScores, hasNeedle, hasBlitz, hasAiArk } = data;
+  const activity = icpActivity(leads.filter((l) => !l.isTest), new Date());
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -104,11 +119,15 @@ export default async function CockpitPage() {
         </div>
       </div>
 
+      {/* Background ICP checks + Needle write-back in progress */}
+      <SyncIndicator active={activity.active} failed={activity.failed} />
+
       {/* Lead table (client component) */}
       <div className="flex-1 min-h-0 overflow-hidden">
         <LeadTable
           leads={leads}
           triggersMap={triggersMap}
+          icpScores={icpScores}
           hasNeedle={hasNeedle}
           hasBlitz={hasBlitz}
           hasAiArk={hasAiArk}

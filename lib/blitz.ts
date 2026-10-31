@@ -281,5 +281,7 @@ export function mapBlitzPerson(p: BlitzPerson, c: BlitzCompany): NewLeadRow {
     needle_synced_at: null,
     engagement_stage: null,
     engagement_at: null,
+    icp_status: null,
+    icp_status_at: null,
   };
 }

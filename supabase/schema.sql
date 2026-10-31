@@ -269,3 +269,6 @@ alter table lead add column if not exists needle_synced_at timestamptz,
   add column if not exists engagement_stage text
     check (engagement_stage in ('invited','connected','messaged','replied')),
   add column if not exists engagement_at timestamptz;
+-- Visible progress of background ICP checks (and the Needle write-back that follows each one).
+alter table lead add column if not exists icp_status text check (icp_status in ('queued','running','failed')),
+  add column if not exists icp_status_at timestamptz;
