@@ -35,6 +35,12 @@
     },
     "app/api/webhooks/needle/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/refill/run/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/refill/enroll/route.ts": {
+      "maxDuration": 60
     }
   }
 }

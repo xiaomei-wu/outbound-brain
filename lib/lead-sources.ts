@@ -22,6 +22,8 @@ export interface BlitzFindResult {
   created: number;
   skipped: number;
   newLeadIds: string[];
+  /** Pass to the next call to continue with the next companies (null = end of results). */
+  nextCursor: string | null;
 }
 
 /**
@@ -30,14 +32,15 @@ export interface BlitzFindResult {
  */
 export async function findBlitzLeads(
   apiKey: string,
-  companyLimit = DEFAULT_COMPANIES
+  companyLimit = DEFAULT_COMPANIES,
+  cursor: string | null = null,
 ): Promise<BlitzFindResult> {
   const db = getDb();
   let created = 0;
   let skipped = 0;
   const newLeadIds: string[] = [];
 
-  const { companies } = await blitzSearchCompanies(apiKey, { maxResults: companyLimit });
+  const { companies, cursor: nextCursor } = await blitzSearchCompanies(apiKey, { maxResults: companyLimit, cursor });
 
   for (const company of companies) {
     if (!company.linkedin_url) { skipped++; continue; }
@@ -79,7 +82,7 @@ export async function findBlitzLeads(
     }
   }
 
-  return { created, skipped, newLeadIds };
+  return { created, skipped, newLeadIds, nextCursor };
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +161,8 @@ function computeInitialFitScore(raw: RawAiArkLead, campaign: CampaignRow): numbe
  * Searches AI Ark using active campaign filters, deduplicates by ai_ark_id, inserts new rows.
  * Returns the count of imported leads and their IDs.
  */
-export async function importAiArkLeads(apiKey: string): Promise<AiArkImportResult> {
+/** page: zero-based AI Ark result page (refill continues with the next one). */
+export async function importAiArkLeads(apiKey: string, page = 0): Promise<AiArkImportResult> {
   const db = getDb();
 
   const { data: campaignData } = await db
@@ -170,7 +174,7 @@ export async function importAiArkLeads(apiKey: string): Promise<AiArkImportResul
 
   const campaign = campaignData as CampaignRow | null;
   const searchFilters: AiArkFilters = campaign ? buildCampaignFilters(campaign) : {};
-  const rawLeads = await search(searchFilters, 20, apiKey);
+  const rawLeads = await search(searchFilters, 20, apiKey, page);
 
   if (rawLeads.length === 0) return { imported: 0, newLeadIds: [] };
 

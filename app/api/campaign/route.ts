@@ -97,6 +97,10 @@ export async function PATCH(request: Request) {
       .update({
         needle_campaign_id: body.needleCampaignId ?? null,
         needle_campaign_name: body.needleCampaignName ?? null,
+        // Another campaign: its send mode and source paging are unknown again
+        needle_sends: null,
+        aiark_page: 1,
+        blitz_cursor: null,
       })
       .eq('is_active', true)
       .select('*')

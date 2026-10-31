@@ -5,6 +5,8 @@ import { getCredentials } from '@/lib/connectors';
 import { LeadTable } from '@/components/lead-table';
 import { FunnelLine } from '@/components/funnel-line';
 import { SyncIndicator } from '@/components/sync-indicator';
+import { RefillBanner } from '@/components/refill-banner';
+import { refillState } from '@/lib/refill-run';
 import { icpActivity } from '@/lib/icp/status';
 import { DbError } from '@/components/db-error';
 
@@ -96,6 +98,8 @@ export default async function CockpitPage() {
 
   const { leads, triggersMap, icpScores, hasNeedle, hasBlitz, hasAiArk } = data;
   const activity = icpActivity(leads.filter((l) => !l.isTest), new Date());
+  // Stored campaign mode only (no Needle call on every page load); refill routes refresh it
+  const refill = await refillState(false).catch(() => null);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -121,6 +125,7 @@ export default async function CockpitPage() {
 
       {/* Background ICP checks + Needle write-back in progress */}
       <SyncIndicator active={activity.active} failed={activity.failed} />
+      {refill && <RefillBanner state={refill} />}
 
       {/* Lead table (client component) */}
       <div className="flex-1 min-h-0 overflow-hidden">

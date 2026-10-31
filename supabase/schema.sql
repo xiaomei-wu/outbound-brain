@@ -272,3 +272,8 @@ alter table lead add column if not exists needle_synced_at timestamptz,
 -- Visible progress of background ICP checks (and the Needle write-back that follows each one).
 alter table lead add column if not exists icp_status text check (icp_status in ('queued','running','failed')),
   add column if not exists icp_status_at timestamptz;
+-- Refill: does the Needle campaign send (auto vs. approval), and where the sources continue.
+alter table campaign add column if not exists needle_sends boolean,
+  add column if not exists aiark_page int not null default 1,
+  add column if not exists blitz_cursor text,
+  add column if not exists refill_find_at timestamptz;

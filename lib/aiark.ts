@@ -128,12 +128,13 @@ export async function preview(
 export async function search(
   filters: AiArkFilters,
   size: number,
-  apiKey: string
+  apiKey: string,
+  page = 0,
 ): Promise<RawAiArkLead[]> {
   const res = await fetch(`${BASE_URL}/v1/people`, {
     method: 'POST',
     headers: headers(apiKey),
-    body: JSON.stringify({ page: 0, size, ...filters }),
+    body: JSON.stringify({ page, size, ...filters }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');

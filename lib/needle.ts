@@ -32,6 +32,7 @@ const READ_TOOLS = new Set([
   'needleListCampaigns',
   'needleListCampaignLeads',
   'needleSearchEvents',
+  'needleGetCampaign',
 ]);
 
 /** Write tools — only suppressions. All others are forbidden. */
@@ -39,6 +40,9 @@ const SUPPRESSION_TOOLS = new Set(['needleCreateSuppressions']);
 
 /** Reading a lead and writing its custom properties (ICP result for campaign routing). Never messages. */
 const LEAD_PROPERTY_TOOLS = new Set(['needleGetLead', 'needleUpdateLead']);
+
+/** Creating leads and enrolling them in the campaign (refill). Callers decide auto vs. click. */
+const ENROLL_TOOLS = new Set(['needleCreateLeads', 'needleEnrollCampaignLeads']);
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -526,4 +530,46 @@ export async function mergeLeadProperties(needleLeadId: string, patch: Record<st
 /** Pure merge: existing keys stay, patched keys win. */
 export function mergeProperties(existing: Record<string, string>, patch: Record<string, string>): Record<string, string> {
   return { ...existing, ...patch };
+}
+
+/** The campaign's step graph (read-only), used to tell whether it sends anything. */
+export async function getCampaignGraph(campaignId: string): Promise<{ nodes?: { kind?: string }[] } | null> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleGetCampaign', { campaignId });
+  const data = extractData<{ campaign?: { graph?: { nodes?: { kind?: string }[] } }; graph?: { nodes?: { kind?: string }[] } }>(raw);
+  return data.campaign?.graph ?? data.graph ?? null;
+}
+
+export interface NeedleNewLead {
+  firstName: string;
+  lastName: string;
+  companyName?: string;
+  companyDomain?: string;
+  jobTitle?: string;
+  identities: { linkedin: string };
+  properties: Record<string, string>;
+  timezone: string;
+}
+
+/**
+ * Creates (or matches, by LinkedIn identity) leads and returns their Needle ids in request order;
+ * null where Needle skipped the row. Refill only.
+ */
+export async function createNeedleLeads(leads: NeedleNewLead[]): Promise<{ id: string | null; status: string }[]> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleCreateLeads', { leads }, ENROLL_TOOLS);
+  const data = extractData<{ results?: { status?: string; leadId?: string; id?: string; lead?: { id?: string } }[] }>(raw);
+  return (data.results ?? []).map((r) => ({ id: r.leadId ?? r.lead?.id ?? r.id ?? null, status: r.status ?? 'unknown' }));
+}
+
+/** Enrolls leads in a campaign; returns how many were accepted. Refill only. */
+export async function enrollInCampaign(campaignId: string, leadIds: string[]): Promise<{ accepted: number; skipped: number }> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleEnrollCampaignLeads', { campaignId, leadIds }, ENROLL_TOOLS);
+  const data = extractData<{ results?: { status?: string }[]; accepted?: unknown[]; skipped?: unknown[] }>(raw);
+  if (data.results) {
+    const accepted = data.results.filter((r) => r.status === 'accepted').length;
+    return { accepted, skipped: data.results.length - accepted };
+  }
+  return { accepted: data.accepted?.length ?? 0, skipped: data.skipped?.length ?? 0 };
 }

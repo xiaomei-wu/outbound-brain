@@ -15,6 +15,7 @@ import type { Campaign, CompanyCheck, Lead, TriggerCatalogEntry } from '@/lib/ty
 import { getOrRunCompanyCheck } from '@/lib/claude/icp-check';
 import { generateCallCard } from '@/lib/claude/call-card';
 import { icpNeedleProperties, pushToNeedle } from '@/lib/needle-writeback';
+import { autoRefill } from '@/lib/refill-run';
 import { routeForScore, roleMatches, selectCompaniesToCheck } from './routing';
 
 // ---------------------------------------------------------------------------
@@ -123,6 +124,15 @@ export async function scheduleIcpChecks(leadIds: string[]): Promise<number> {
 
   for (let i = 0; i < toCheck.length; i += CHECK_CONCURRENCY) {
     await Promise.all(toCheck.slice(i, i + CHECK_CONCURRENCY).map(checkCompany));
+  }
+
+  // Newly checked A/B leads may refill a low call queue (automatic only while the campaign sends nothing)
+  if (toCheck.length > 0) {
+    try {
+      await autoRefill({ allowFind: false });
+    } catch (err) {
+      console.error('[schedule] refill failed', err instanceof Error ? err.message : err);
+    }
   }
 
   return toCheck.length;
