@@ -11,6 +11,7 @@ import {
   SearchIcon,
   PhoneIcon,
   MessageCircleIcon,
+  SendIcon,
   FileTextIcon,
   RotateCcwIcon,
   ChevronRightIcon,
@@ -192,6 +193,7 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
   const [isResetting, startReset] = useTransition();
   const [isFindingPhones, startFindPhones] = useTransition();
   const [isSyncingReplies, startSyncReplies] = useTransition();
+  const [isSendingToNeedle, startSendToNeedle] = useTransition();
 
   // Partition leads into three views
   const realLeads   = leads.filter((l) => !l.isTest && l.sortoutStatus === null);
@@ -225,6 +227,24 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
         setShowFindDialog(false);
+      }
+    });
+  }
+
+  /** Enrolls checked A/B candidates in the Needle campaign now (the click is the approval). */
+  function handleSendToNeedle() {
+    startSendToNeedle(async () => {
+      try {
+        const res = await fetch('/api/refill/manual', { method: 'POST' });
+        const data: { message?: string; error?: string } = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? 'Aufnahme in die Needle-Kampagne fehlgeschlagen.');
+          return;
+        }
+        toast.info(data.message ?? 'Erledigt.');
+        router.refresh();
+      } catch {
+        toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
     });
   }
@@ -320,7 +340,7 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
     });
   }
 
-  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting || isFindingPhones || isSyncingReplies;
+  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting || isFindingPhones || isSyncingReplies || isSendingToNeedle;
 
   return (
     <div className="flex flex-col h-full">
@@ -370,6 +390,18 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
         >
           {isSyncingReplies ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <MessageCircleIcon className="h-3 w-3" />}
           Antworten abrufen
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSendToNeedle}
+          disabled={anyBusy || !hasNeedle}
+          className="text-xs"
+          title="Geprüfte A/B-Leads mit LinkedIn-Profil, die noch nicht in Needle sind, in die gewählte Needle-Kampagne aufnehmen (mit ICP-Eigenschaften)"
+        >
+          {isSendingToNeedle ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SendIcon className="h-3 w-3" />}
+          Leads an Needle senden
         </Button>
 
         <Button
