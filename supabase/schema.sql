@@ -252,3 +252,6 @@ alter table company_check enable row level security;
 -- existing demo rows become TEST
 update lead set is_test = true, origin = 'test' where name like '%[TEST%' or id::text like '30000001-%';
 update lead set origin = 'needle_search' where is_test = false and needle_lead_id is not null and origin = 'manual';
+-- Remembers when the cheaper phone chain (AI Ark, BlitzAPI) was tried without a hit,
+-- so the UI can offer Lusha (last resort) directly.
+alter table lead add column if not exists phone_lookup_at timestamptz;

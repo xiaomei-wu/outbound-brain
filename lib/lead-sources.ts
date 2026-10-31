@@ -220,6 +220,7 @@ export async function importAiArkLeads(apiKey: string): Promise<AiArkImportResul
       phoneSource: null,
       phoneDnc: false,
       callCard: null,
+      phoneLookupAt: null,
     });
 
     const { data: existing } = await db

@@ -396,6 +396,7 @@ export default async function LeadPage({ params, searchParams }: LeadPageProps) 
                   hasLusha={hasLusha}
                   hasBlitz={hasBlitz}
                   hasAiArk={hasAiArk}
+                  chainTried={lead.phoneLookupAt !== null}
                   visible={showPhoneLookup}
                 />
               </>

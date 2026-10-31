@@ -273,5 +273,6 @@ export function mapBlitzPerson(p: BlitzPerson, c: BlitzCompany): NewLeadRow {
     phone_source: null,
     phone_dnc: false,
     call_card: null,
+    phone_lookup_at: null,
   };
 }

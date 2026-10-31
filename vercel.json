@@ -26,6 +26,9 @@
     },
     "app/api/leads/find/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/leads/phone-lookup-all/route.ts": {
+      "maxDuration": 300
     }
   }
 }

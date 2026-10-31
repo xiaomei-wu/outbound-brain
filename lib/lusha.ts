@@ -127,7 +127,8 @@ export async function lushaUsage(apiKey: string): Promise<{ remaining: number }>
 /**
  * Search for a contact by LinkedIn URL or name + company.
  * Returns `{ id, phoneCredits }` if found, or null if not found.
- * `phoneCredits` is the number of credits required to reveal the phone, or null
+ * `phoneCredits` is the number of credits required to reveal the phone, or null when
+ * Lusha has no phone number for the contact (then no reveal should be offered)
  * if the vendor does not report it.
  */
 export async function lushaSearch(
@@ -156,18 +157,27 @@ export async function lushaSearch(
     results?: Array<{
       id?: string;
       has?: Record<string, boolean>;
-      canReveal?: Array<{ field: string; credits?: number }>;
+      canReveal?: Array<{ field: string; credits?: number; availability?: string }>;
     }>;
   };
 
   const first = body.results?.[0];
   if (!first?.id) return null;
 
-  // Extract phone credit cost from canReveal
-  const phoneCost =
-    first.canReveal?.find((e) => e.field === 'phones')?.credits ?? null;
+  return { id: first.id, phoneCredits: phoneRevealCost(first.canReveal) };
+}
 
-  return { id: first.id, phoneCredits: phoneCost };
+/**
+ * Credits to reveal phone numbers, or null when Lusha has no phone for this contact.
+ * Search answers for every known contact; only `canReveal` with field "phones"
+ * (and availability not "unavailable") means a number can actually be revealed.
+ */
+export function phoneRevealCost(
+  canReveal: Array<{ field: string; credits?: number; availability?: string }> | undefined,
+): number | null {
+  const phones = canReveal?.find((e) => e.field === 'phones');
+  if (!phones || phones.availability === 'unavailable') return null;
+  return phones.credits ?? 0;
 }
 
 // ---------------------------------------------------------------------------

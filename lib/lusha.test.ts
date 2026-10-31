@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { lushaContactInput, pickPhone, lushaErrorMessage } from './lusha';
+import { lushaContactInput, phoneRevealCost, pickPhone, lushaErrorMessage } from './lusha';
 
 describe('pickPhone', () => {
   it('prefers direct over mobile', () => {
@@ -93,5 +93,24 @@ describe('lushaContactInput', () => {
     expect(lushaContactInput({ ...base, name: 'Ansprechpartner offen (Beispiel Bau GmbH)' })).toBeNull();
     expect(lushaContactInput({ ...base, name: 'Erika' })).toBeNull();
     expect(lushaContactInput({ name: 'Erika Muster', profileUrl: null, companyDomain: null, company: null })).toBeNull();
+  });
+});
+
+describe('phoneRevealCost', () => {
+  it('returns the phone credits when phones are available (real response shape)', () => {
+    expect(phoneRevealCost([
+      { field: 'emails', credits: 1, availability: 'available' },
+      { field: 'phones', credits: 5, availability: 'available' },
+    ])).toBe(5);
+  });
+
+  it('returns null when Lusha only knows emails', () => {
+    expect(phoneRevealCost([{ field: 'emails', credits: 1, availability: 'available' }])).toBeNull();
+  });
+
+  it('returns null when phones are listed as unavailable or nothing is revealable', () => {
+    expect(phoneRevealCost([{ field: 'phones', credits: 5, availability: 'unavailable' }])).toBeNull();
+    expect(phoneRevealCost(undefined)).toBeNull();
+    expect(phoneRevealCost([])).toBeNull();
   });
 });

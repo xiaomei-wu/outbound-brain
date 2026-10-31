@@ -19,3 +19,31 @@ export function isUsRegion(region: string | null): boolean {
   if (!region) return false;
   return /\b(united states|usa|us)\b/i.test(region);
 }
+
+/**
+ * Leads the bulk phone search covers: real, not sorted out, no number yet, chain not yet
+ * tried, and their company scored A or B (nobody calls C/D, so no credits are spent there).
+ */
+export function selectLeadsForPhoneSearch(
+  leads: {
+    id: string;
+    isTest: boolean;
+    phone: string | null;
+    sortoutStatus: string | null;
+    phoneLookupAt: string | null;
+    companyKey: string | null;
+  }[],
+  scoreByCompany: Map<string, string>,
+): string[] {
+  return leads
+    .filter(
+      (l) =>
+        !l.isTest &&
+        !l.phone &&
+        !l.sortoutStatus &&
+        !l.phoneLookupAt &&
+        l.companyKey !== null &&
+        ['A', 'B'].includes(scoreByCompany.get(l.companyKey) ?? ''),
+    )
+    .map((l) => l.id);
+}

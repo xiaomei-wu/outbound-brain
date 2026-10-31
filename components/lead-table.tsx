@@ -9,6 +9,7 @@ import {
   Loader2Icon,
   UsersIcon,
   SearchIcon,
+  PhoneIcon,
   FileTextIcon,
   RotateCcwIcon,
   ChevronRightIcon,
@@ -189,6 +190,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
   const [isResearchingAll, startResearchAll] = useTransition();
   const [isGeneratingBriefs, startGenerateBriefs] = useTransition();
   const [isResetting, startReset] = useTransition();
+  const [isFindingPhones, startFindPhones] = useTransition();
 
   // Partition leads into three views
   const realLeads   = leads.filter((l) => !l.isTest && l.sortoutStatus === null);
@@ -219,6 +221,24 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
         setShowFindDialog(false);
+      }
+    });
+  }
+
+  /** Searches numbers for all A/B leads via AI Ark / BlitzAPI; Lusha stays a per-lead last resort. */
+  function handleFindPhones() {
+    startFindPhones(async () => {
+      try {
+        const res = await fetch('/api/leads/phone-lookup-all', { method: 'POST' });
+        const data: { message?: string; error?: string } = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? 'Nummernsuche fehlgeschlagen.');
+          return;
+        }
+        toast.info(data.message ?? 'Nummernsuche abgeschlossen.');
+        router.refresh();
+      } catch {
+        toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
     });
   }
@@ -277,7 +297,7 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
     });
   }
 
-  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting;
+  const anyBusy = isFindingLeads || isResearchingAll || isGeneratingBriefs || isResetting || isFindingPhones;
 
   return (
     <div className="flex flex-col h-full">
@@ -303,6 +323,18 @@ export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }:
         >
           {isResearchingAll ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SearchIcon className="h-3 w-3" />}
           Offene ICP-Checks starten
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleFindPhones}
+          disabled={anyBusy}
+          className="text-xs"
+          title="AI Ark / BlitzAPI für alle A/B-Leads ohne Nummer; Lusha nur einzeln im Lead"
+        >
+          {isFindingPhones ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <PhoneIcon className="h-3 w-3" />}
+          Nummern suchen
         </Button>
 
         <Button

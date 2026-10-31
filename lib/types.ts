@@ -276,6 +276,7 @@ export interface Lead {
   sortoutUntil: string | null;
   phoneSource: string | null;    // 'lusha' | 'ai_ark' | 'blitz' | 'manuell' | …
   phoneDnc: boolean;
+  phoneLookupAt: string | null;  // cheaper phone chain tried without a hit → offer Lusha
   callCard: CallCard | null;
   createdAt: string;
 }

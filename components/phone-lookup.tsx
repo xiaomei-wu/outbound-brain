@@ -11,6 +11,8 @@ interface PhoneLookupProps {
   hasLusha: boolean;
   hasBlitz: boolean;
   hasAiArk: boolean;
+  /** The cheaper chain already ran without a hit (bulk search): offer Lusha directly. */
+  chainTried: boolean;
   /** Controls whether this component is rendered (Task 6 wires the condition). */
   visible: boolean;
 }
@@ -36,14 +38,16 @@ type ChainResult = { found: boolean; message: string };
  * Rendered next to <PhoneInput> when a lead has no phone number.
  * Only shown when visible=true (Task 6 gates on ICP score A/B).
  */
-export function PhoneLookup({ leadId, hasLusha, hasBlitz, hasAiArk, visible }: PhoneLookupProps) {
+export function PhoneLookup({ leadId, hasLusha, hasBlitz, hasAiArk, chainTried, visible }: PhoneLookupProps) {
   const router = useRouter();
 
   type LookupState = 'idle' | 'chain' | 'searching' | 'awaiting_confirm' | 'revealing' | 'done_dnc' | 'done';
   const [state, setState] = useState<LookupState>('idle');
   const [searchResult, setSearchResult] = useState<SearchResult | null>(null);
   const [dncMessage, setDncMessage] = useState<string | null>(null);
-  const [chainMessage, setChainMessage] = useState<string | null>(null);
+  const [chainMessage, setChainMessage] = useState<string | null>(
+    chainTried ? 'Keine Nummer über AI Ark / BlitzAPI gefunden.' : null,
+  );
 
   // Compute before TypeScript narrows `state` in render branches
   const isSearching = state === 'searching' || state === 'chain';

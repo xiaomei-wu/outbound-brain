@@ -97,16 +97,18 @@ export async function POST(
         });
       }
 
-      const creditsMsg =
-        result.phoneCredits != null
-          ? `≈ ${result.phoneCredits} Credits`
-          : 'Kosten unbekannt';
+      if (result.phoneCredits === null) {
+        return Response.json({
+          found: false,
+          message: 'Lusha kennt den Kontakt, hat aber keine Telefonnummer (keine Aufdeck-Credits verbraucht).',
+        });
+      }
 
       return Response.json({
         found: true,
         lushaId: result.id,
         credits: result.phoneCredits,
-        message: `Lusha hat eine Nummer (${creditsMsg}) — aufdecken?`,
+        message: `Lusha hat eine Nummer (≈ ${result.phoneCredits} Credits) — aufdecken?`,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
