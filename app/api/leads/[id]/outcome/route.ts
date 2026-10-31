@@ -14,22 +14,12 @@
 import { NextResponse } from 'next/server';
 import { applySortout } from '@/lib/sortout';
 import { getDb } from '@/lib/db';
-import { evaluateCall } from '@/lib/claude/evaluation';
+import { analyzeCall } from '@/lib/call-analysis';
 import { refreshLeadPriority } from '@/lib/priority';
 import { postSlackBriefing } from '@/lib/slack';
-import {
-  toCampaign,
-  toLeadTrigger,
-  toBantClaim,
-} from '@/lib/mappers';
+import { toCampaign } from '@/lib/mappers';
+import type { CampaignRow } from '@/lib/mappers';
 import type {
-  CampaignRow,
-  LeadTriggerRow,
-  BantClaimRow,
-} from '@/lib/mappers';
-import type {
-  CallBriefing,
-  CallEvaluation,
   CallLog,
   CallOutcome,
   NextAction,
@@ -121,122 +111,16 @@ export async function POST(
       );
     }
 
-    // Read active triggers for feedback
-    const { data: triggerRows } = await db
-      .from('lead_trigger')
-      .select('*')
-      .eq('lead_id', id)
-      .eq('is_active', true);
-
-    const activeTriggers = (triggerRows ?? []).map((r) =>
-      toLeadTrigger(r as LeadTriggerRow),
-    );
-
-    // Read existing BANT claims
-    const { data: bantRows } = await db
-      .from('bant_claim')
-      .select('*')
-      .eq('lead_id', id);
-
-    const existingBant = (bantRows ?? []).map((r) =>
-      toBantClaim(r as BantClaimRow),
-    );
-
-    // 2. Evaluate call via Claude
-    let evaluation: CallEvaluation | null = null;
-
-    const brief: CallBriefing = (leadRow.cached_brief as CallBriefing) ?? {
-      headline: `Call with ${leadRow.name as string}`,
-      context: '',
-      whyNow: '',
-      evidenceUrl: null,
-      evidenceNote: '',
-      hook: '',
-      facts: [],
-      hypotheses: [],
-      openQuestions: [],
-      bant: [],
-      talkingPoints: [],
-      objections: [],
-      phone: leadRow.phone as string | null,
-      consentLine: '',
-      meetingSlots: [],
-      contact: leadRow.name as string,
-      goal: '',
-      assumptions: [],
-    };
-
-    if (campaign) {
-      try {
-        const evalResult = await evaluateCall(
-          brief,
-          body.outcome,
-          body.notes ?? null,
-          body.transcript ?? null,
-          activeTriggers,
-          existingBant,
-          campaign,
-        );
-        evaluation = evalResult.evaluation;
-      } catch (evalErr) {
-        console.error('Evaluation failed:', evalErr);
-      }
-    }
-
-    // 3. Update call_log with analysis
-    const demoReady = evaluation?.demoReady ?? false;
-    const recommendedAction = evaluation?.recommendedAction ?? null;
-
-    await db
-      .from('call_log')
-      .update({
-        analysis: evaluation,
-        demo_ready: demoReady,
-        recommended_action: recommendedAction,
-      })
-      .eq('id', callLogRow.id);
-
-    // 4. Insert bant_claim rows from evaluation
-    if (evaluation?.bantUpdates) {
-      for (const update of evaluation.bantUpdates) {
-        await db.from('bant_claim').insert({
-          lead_id: id,
-          dimension: update.dimension,
-          status: update.status,
-          value: update.value,
-          evidence: update.evidence,
-          source: 'call',
-          call_log_id: callLogRow.id,
-        });
-      }
-    }
-
-    // 5. Update lead_trigger feedback (never degrade on not_tested)
-    if (evaluation?.triggerFeedback) {
-      for (const fb of evaluation.triggerFeedback) {
-        if (fb.result === 'not_tested') continue;
-        await db
-          .from('lead_trigger')
-          .update({
-            feedback: fb.result,
-            feedback_evidence: fb.evidence,
-          })
-          .eq('id', fb.leadTriggerId);
-      }
-    }
-
-    // 6. Apply evidenced lead corrections
-    if (evaluation?.leadCorrections) {
-      const leadUpdates: Record<string, string> = {};
-      for (const correction of evaluation.leadCorrections) {
-        if (correction.field === 'role') {
-          leadUpdates.role = correction.value;
-        }
-      }
-      if (Object.keys(leadUpdates).length > 0) {
-        await db.from('lead').update(leadUpdates).eq('id', id);
-      }
-    }
+    // 2.–6. Claude evaluation (BANT, trigger feedback, corrections); failure is reported, not fatal
+    const { evaluation, demoReady, recommendedAction, error: analysisError } = await analyzeCall({
+      leadId: id,
+      callLogId: callLogRow.id as string,
+      outcome: body.outcome,
+      notes: body.notes ?? null,
+      transcript: body.transcript ?? null,
+      leadRow: leadRow as Record<string, unknown>,
+      campaign,
+    });
 
     // 7. Handle opt-out and status
     let newStatus: string;
@@ -341,6 +225,7 @@ export async function POST(
       callLog,
       evaluation,
       priority,
+      analysisError,
     });
   } catch (err) {
     console.error('Outcome route error:', err);

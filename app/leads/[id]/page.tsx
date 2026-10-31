@@ -39,6 +39,7 @@ import { getCompanyCheck } from '@/lib/company-checks';
 import { routeForScore } from '@/lib/icp/routing';
 import { DbError } from '@/components/db-error';
 import { AnalysisPanel } from '@/components/analysis-panel';
+import { RetryAnalysisButton } from '@/components/retry-analysis-button';
 import { BriefingPanel } from '@/components/briefing-panel';
 import { OutcomeButtons } from '@/components/outcome-buttons';
 import { PhoneInput } from '@/components/phone-input';
@@ -553,9 +554,9 @@ function PreviousCallLog({ log, leadId, triggers, defaultOpen }: PreviousCallLog
         <span className="text-xs text-muted-foreground ml-auto">
           {new Date(log.createdAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: 'numeric', month: 'short' })}
         </span>
-        {log.analysis && (
-          <span className="text-[11px] text-muted-foreground group-open:hidden">Auswertung anzeigen</span>
-        )}
+        <span className="text-[11px] text-muted-foreground group-open:hidden">
+          {log.analysis ? 'Auswertung anzeigen' : 'Auswertung fehlt'}
+        </span>
       </summary>
       {log.notes && <p className="text-xs text-muted-foreground">{log.notes}</p>}
       {log.sellerAction && (
@@ -563,9 +564,13 @@ function PreviousCallLog({ log, leadId, triggers, defaultOpen }: PreviousCallLog
           Seller: {log.sellerReason ?? log.sellerAction}
         </p>
       )}
-      {log.analysis && (
+      {log.analysis ? (
         <div className="pt-3">
           <AnalysisPanel evaluation={log.analysis} callLog={log} leadId={leadId} triggers={triggers} />
+        </div>
+      ) : (
+        <div className="pt-2">
+          <RetryAnalysisButton leadId={leadId} callLogId={log.id} />
         </div>
       )}
     </details>

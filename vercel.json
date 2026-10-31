@@ -44,6 +44,9 @@
     },
     "app/api/needle/search-leads/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/leads/[id]/calls/[callId]/analyze/route.ts": {
+      "maxDuration": 60
     }
   }
 }

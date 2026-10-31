@@ -6,6 +6,7 @@ import { Loader2Icon } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { useLogOutcome } from '@/lib/hooks/use-log-outcome';
 import { AnalysisPanel } from '@/components/analysis-panel';
+import { RetryAnalysisButton } from '@/components/retry-analysis-button';
 import type { CallOutcome, LeadTrigger } from '@/lib/types';
 
 interface OutcomeConfig {
@@ -81,9 +82,7 @@ export function OutcomeButtons({ leadId, triggers = [] }: OutcomeButtonsProps) {
             triggers={triggers}
           />
         ) : (
-          <p className="text-xs text-muted-foreground">
-            Analyse konnte nicht erstellt werden. Ergebnis wurde trotzdem gespeichert.
-          </p>
+          <RetryAnalysisButton leadId={leadId} callLogId={result.callLog.id} />
         )}
       </div>
     );
