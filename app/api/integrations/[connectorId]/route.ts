@@ -15,8 +15,9 @@ function err(msg: string, status = 400) {
   return Response.json({ error: msg }, { status });
 }
 
+/** Every connector in the registry (needle, ai_ark, zapmail, blitz, lusha) can be saved. */
 function isConnectorId(s: string): s is ConnectorId {
-  return s === 'needle' || s === 'ai_ark' || s === 'zapmail';
+  return Object.hasOwn(connectors, s);
 }
 
 export async function GET(
