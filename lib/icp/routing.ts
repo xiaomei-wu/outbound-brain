@@ -65,33 +65,32 @@ export function normalizeIcpResult(r: CompanyCheck): CompanyCheck {
 function stems(text: string): string[] {
   return text
     .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
+    .split(/[\s/&@,()+.-]+/)
+    .filter((w) => w.length > 2)
     .map((w) => w.slice(0, 8));
 }
 
+/** Roles that clearly cannot decide (PDF: a proven No beats an unfounded Yes, so only clear cases). */
+const JUNIOR_ROLE = /(werkstudent|praktikant|trainee|auszubild|azubi|\bintern\b|student|assisten|sachbearbeit)/i;
+
+/** Decision-maker or real-estate acquisition/development terms (German and English). */
+const RELEVANT_ROLE =
+  /(geschäftsf|geschaeftsf|vorstand|inhaber|gründer|founder|ceo|coo|cfo|managing|director|direktor|head|leiter|leitung|prokur|partner|ankauf|akquis|acquisition|grundstück|grundstueck|projektentw|development|investment|asset|portfolio|transaktion|transaction)/i;
+
 /**
- * True when at least one ICP role shares all word stems with the lead's role.
- * null role -> true (unknown is not a mismatch).
+ * Person fit for the campaign's "AP passend?" step. Unknown or empty roles fit (missing
+ * information is no exclusion). A role fails only when it is clearly junior, or shares no
+ * word with the ICP roles and contains no decision-maker or real-estate term.
  */
 export function roleMatches(role: string | null, icpRoles: string[]): boolean {
-  if (role === null) return true;
+  if (role === null || role.trim() === '') return true;
+  if (JUNIOR_ROLE.test(role)) return false;
+  if (RELEVANT_ROLE.test(role)) return true;
 
-  const roleStemSet = stems(role);
-  if (roleStemSet.length === 0) return true;
-
-  return icpRoles.some((icpRole) => {
-    const icpStems = stems(icpRole);
-    if (icpStems.length === 0) return false;
-
-    // Every stem from the shorter side must appear in the longer side
-    const [shorter, longer] =
-      roleStemSet.length <= icpStems.length
-        ? [roleStemSet, icpStems]
-        : [icpStems, roleStemSet];
-
-    return shorter.every((s) => longer.some((l) => l === s || l.startsWith(s) || s.startsWith(l)));
-  });
+  const roleStems = stems(role);
+  return icpRoles.some((icpRole) =>
+    stems(icpRole).some((s) => roleStems.some((r) => r === s || r.startsWith(s) || s.startsWith(r))),
+  );
 }
 
 // ---------------------------------------------------------------------------

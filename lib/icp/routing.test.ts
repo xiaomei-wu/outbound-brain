@@ -171,6 +171,22 @@ describe('roleMatches', () => {
   it('case insensitive matching', () => {
     expect(roleMatches('LEITUNG ANKAUF', ['leitung ankauf'])).toBe(true);
   });
+
+  const ICP = ['Geschäftsführung', 'Leitung Ankauf', 'Leitung Projektentwicklung', 'Asset Management'];
+
+  it('accepts the real contacts from the Needle campaign (regression 2026-10-31)', () => {
+    expect(roleMatches('Leiter Projektentwicklung & Grundstücksakquise', ICP)).toBe(true);
+    expect(roleMatches('Ansprechpartner Grundstücksankauf', ICP)).toBe(true);
+    expect(roleMatches('Senior Projektleiter/ Expert Acquisition', ICP)).toBe(true);
+    expect(roleMatches('Managing Director @ e+k Investment Management GmbH', ICP)).toBe(true);
+    expect(roleMatches('Head of Fund and Asset Management', ICP)).toBe(true);
+  });
+
+  it('rejects clearly junior or unrelated roles', () => {
+    expect(roleMatches('Werkstudent Projektentwicklung', ICP)).toBe(false);
+    expect(roleMatches('Sachbearbeiterin Buchhaltung', ICP)).toBe(false);
+    expect(roleMatches('Praktikant Marketing', ICP)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
