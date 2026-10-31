@@ -12,8 +12,9 @@ import { toLead, type LeadRow } from '@/lib/mappers';
 import { selectLeadsForPhoneSearch } from '@/lib/phone-chain';
 import { loadChainKeys, runPhoneChain } from '@/lib/phone-chain-run';
 
-// AI Ark allows 5 requests per second; 3 parallel lookups stay well below that
-const CONCURRENCY = 3;
+// AI Ark's phone finder rate-limits parallel requests (429 seen with 3 in parallel),
+// so leads are searched one at a time with a short pause
+const PAUSE_MS = 400;
 
 export async function POST() {
   const keys = await loadChainKeys();
@@ -35,14 +36,19 @@ export async function POST() {
   const ids = selectLeadsForPhoneSearch(((leadRows ?? []) as LeadRow[]).map(toLead), scores);
 
   let found = 0;
-  for (let i = 0; i < ids.length; i += CONCURRENCY) {
-    const outcomes = await Promise.all(ids.slice(i, i + CONCURRENCY).map((id) => runPhoneChain(id, keys)));
-    found += outcomes.filter((o) => o.found).length;
+  let failed = 0;
+  for (const id of ids) {
+    const outcome = await runPhoneChain(id, keys);
+    if (outcome.found) found++;
+    if (outcome.failed) failed++;
+    await new Promise((r) => setTimeout(r, PAUSE_MS));
   }
 
   const message =
     ids.length === 0
       ? 'Keine A/B-Leads ohne Nummer offen.'
-      : `${found} von ${ids.length} Nummern gefunden. Für die übrigen kannst du im Lead Lusha versuchen.`;
-  return Response.json({ searched: ids.length, found, message });
+      : `${found} von ${ids.length} Nummern gefunden.` +
+        (failed ? ` ${failed} nicht durchsucht (Anbieter-Limit) — bitte erneut klicken.` : '') +
+        ' Für Leads ohne Treffer kannst du im Lead Lusha versuchen.';
+  return Response.json({ searched: ids.length, found, failed, message });
 }

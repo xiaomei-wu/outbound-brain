@@ -11,6 +11,8 @@ import { isUsRegion, phoneSourceOrder, type ChainSource } from '@/lib/phone-chai
 
 export interface ChainOutcome {
   found: boolean;
+  /** A source errored (e.g. rate limit); the lead is not marked as searched. */
+  failed?: boolean;
   source?: ChainSource;
   tried: ChainSource[];
   message: string;
@@ -42,6 +44,7 @@ export async function runPhoneChain(leadId: string, keys: ChainKeys): Promise<Ch
   const order = phoneSourceOrder({ hasAiArk: Boolean(keys.aiArk), hasBlitz: Boolean(keys.blitz), isUs: isUsRegion(lead.region) });
   const hasLinkedin = Boolean(lead.profile_url?.includes('linkedin.com/'));
   const tried: ChainSource[] = [];
+  let failed = false;
 
   for (const source of order) {
     try {
@@ -71,12 +74,17 @@ export async function runPhoneChain(leadId: string, keys: ChainKeys): Promise<Ch
       }
     } catch (err) {
       // A failing source must not stop the chain; the next one (or Lusha) still gets a chance
+      failed = true;
       console.error(`[phone-chain] ${source} failed`, err instanceof Error ? err.message : err);
     }
   }
 
-  if (tried.length > 0) {
+  // Only a clean "no number" counts as searched; errors (rate limit, timeout) leave the lead open
+  if (tried.length > 0 && !failed) {
     await db.from('lead').update({ phone_lookup_at: new Date().toISOString() }).eq('id', leadId);
+  }
+  if (failed) {
+    return { found: false, failed: true, tried, message: 'Telefonsuche gerade nicht möglich (Anbieter-Limit). Bitte gleich erneut versuchen.' };
   }
   const triedLabel = tried.length ? tried.map((s) => SOURCE_LABEL[s]).join(', ') : 'keine günstigere Quelle';
   return { found: false, tried, message: `Keine Nummer gefunden (${triedLabel}).` };

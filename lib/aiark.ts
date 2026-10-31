@@ -205,6 +205,8 @@ export function staffCount(raw: RawAiArkLead): number | null {
 // findMobilePhone — POST /v1/people/mobile-phone-finder
 // ---------------------------------------------------------------------------
 
+const RATE_LIMIT_RETRY_MS = 1500;
+
 export type MobilePhoneInput = { linkedin: string } | { domain: string; name: string };
 
 /**
@@ -226,12 +228,19 @@ export function pickAiArkPhone(data: unknown): string | null {
  * Returns null when no number exists.
  */
 export async function findMobilePhone(input: MobilePhoneInput, apiKey: string): Promise<string | null> {
-  const res = await fetch(`${BASE_URL}/v1/people/mobile-phone-finder`, {
-    method: 'POST',
-    headers: headers(apiKey),
-    body: JSON.stringify(input),
-    signal: AbortSignal.timeout(30_000),
-  });
+  const request = () =>
+    fetch(`${BASE_URL}/v1/people/mobile-phone-finder`, {
+      method: 'POST',
+      headers: headers(apiKey),
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(30_000),
+    });
+  let res = await request();
+  if (res.status === 429) {
+    // Rate limited: one retry after a short pause
+    await new Promise((r) => setTimeout(r, RATE_LIMIT_RETRY_MS));
+    res = await request();
+  }
   if (res.status === 404) return null;
   if (!res.ok) {
     const text = await res.text().catch(() => '');
