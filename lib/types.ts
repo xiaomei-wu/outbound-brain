@@ -22,7 +22,49 @@ export type CallOutcome = 'booked' | 'not_booked' | 'not_now' | 'opt_out';
 export type TriggerTier = 1 | 2 | 3;
 export type TriggerVerdict = 'strong' | 'usable' | 'reject';
 
-export type ConnectorId = 'needle' | 'ai_ark' | 'zapmail';
+export type ConnectorId = 'needle' | 'ai_ark' | 'zapmail' | 'blitz' | 'lusha';
+
+// --- Real-estate ICP flow (2026-10-31) ---
+
+export type LeadOrigin =
+  | 'needle_campaign' | 'needle_search' | 'blitz' | 'ai_ark'
+  | 'csv' | 'manual' | 'prepared' | 'test';
+export type IcpScore = 'A' | 'B' | 'C' | 'D' | 'nicht_bewertbar';
+export type SortoutStatus = 'not_a_fit' | 'wrong_contact' | 'not_now' | 'opt_out';
+
+export interface IcpSignal {
+  text: string;
+  url: string;                   // direct source URL (PDF: every fit signal needs one)
+}
+
+/** Result of Noel's ICP check (ICP-Check Immobilienwirtschaft), cached per company. */
+export interface CompanyCheck {
+  id: string;
+  companyKey: string;
+  companyName: string;
+  domain: string | null;
+  segments: string[];            // dominant segment first
+  score: IcpScore;
+  whatTheyDo: string;            // two factual sentences
+  fitSignals: IcpSignal[];
+  against: string[];             // evidenced counterpoints; empty = no disqualifiers found
+  decision: string;              // Priorisiert bearbeiten / bearbeiten und klären / zurückstellen / ausschließen / Recherche ergänzen
+  decisionReason: string;
+  painHypothesis: string;        // explicitly a hypothesis, or „Keine belastbare Pain-Hypothese ableitbar."
+  entryPoint: string;
+  openQuestion: string;
+  checkedAt: string;
+}
+
+/** Per-lead call card in the PDF output format (A/B only). */
+export interface CallCard {
+  anlass: string;
+  anlassUrl: string | null;
+  opener: string;                // verbatim, max 30-40 s spoken
+  followUps: string[];           // exactly 2
+  objection: { expected: string; response: string };
+  openQuestion: string;
+}
 
 export type CriterionId =
   | 'reason' | 'triggerLanded' | 'discovery' | 'listening'
@@ -56,6 +98,8 @@ export interface Campaign {
   tone: string;                  // 'professional' | 'casual'
   offerKnowledge: string;        // approved facts about the offer; objection answers may only use these
   minSampleSize: number;         // comparable cases needed before a campaign proposal
+  needleCampaignId: string | null;
+  needleCampaignName: string | null;
   isActive: boolean;
   createdAt: string;
 }
@@ -223,6 +267,16 @@ export interface Lead {
   status: LeadStatus;
   owner: string | null;
   lastAlertAt: string | null;
+  origin: LeadOrigin;
+  originDetail: string | null;   // e.g. Needle campaign name
+  isTest: boolean;               // simulated demo data; never in the real funnel
+  companyKey: string | null;     // cache key for company_check
+  sortoutStatus: SortoutStatus | null;
+  sortoutSyncedNeedle: boolean;
+  sortoutUntil: string | null;
+  phoneSource: string | null;    // 'lusha' | 'ai_ark' | 'blitz' | 'manuell' | …
+  phoneDnc: boolean;
+  callCard: CallCard | null;
   createdAt: string;
 }
 

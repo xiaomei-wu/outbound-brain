@@ -12,6 +12,7 @@
 // Response: { callLog, evaluation, priority }
 
 import { NextResponse } from 'next/server';
+import { applySortout } from '@/lib/sortout';
 import { getDb } from '@/lib/db';
 import { evaluateCall } from '@/lib/claude/evaluation';
 import { refreshLeadPriority } from '@/lib/priority';
@@ -251,6 +252,12 @@ export async function POST(
           .from('campaign')
           .update({ exclusions: newExclusions })
           .eq('id', campaign.id);
+      }
+      // The person asked not to be contacted: permanent opt-out, mirrored to Needle
+      try {
+        await applySortout(id, 'opt_out', 'Opt-out im Gespräch');
+      } catch (err) {
+        console.error('[outcome] opt-out sortout failed', err);
       }
       // Cancel unsent cadence steps
       await db

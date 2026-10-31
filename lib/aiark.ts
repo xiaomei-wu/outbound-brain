@@ -58,7 +58,7 @@ export interface RawAiArkLead {
       name?: string;
       description?: string;
       /** Employee count. */
-      staff?: number;
+      staff?: number | { total?: number; range?: { start?: number; end?: number } };
     };
     link?: {
       linkedin?: string;
@@ -192,4 +192,51 @@ export async function getCredits(apiKey: string): Promise<number> {
   }
   const data = (await res.json()) as { total?: number };
   return data.total ?? 0;
+}
+
+/** Employee count from an AI Ark company summary; the API returns either a number or { total, range }. */
+export function staffCount(raw: RawAiArkLead): number | null {
+  const staff = raw.company?.summary?.staff;
+  if (typeof staff === 'number') return staff;
+  return staff?.total ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// findMobilePhone — POST /v1/people/mobile-phone-finder
+// ---------------------------------------------------------------------------
+
+export type MobilePhoneInput = { linkedin: string } | { domain: string; name: string };
+
+/**
+ * Picks the number to call from AI Ark's nested `data` (array of arrays of strings):
+ * a German number (+49) first, otherwise the first non-empty one.
+ */
+export function pickAiArkPhone(data: unknown): string | null {
+  if (!Array.isArray(data)) return null;
+  const numbers = data
+    .flat()
+    .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
+    .map((n) => n.trim());
+  return numbers.find((n) => n.startsWith('+49')) ?? numbers[0] ?? null;
+}
+
+/**
+ * Mobile Phone Finder (docs.ai-ark.com, verified 2026-10-31).
+ * Cost: 5 credits, charged only when a number is found; 404 = nothing found, free.
+ * Returns null when no number exists.
+ */
+export async function findMobilePhone(input: MobilePhoneInput, apiKey: string): Promise<string | null> {
+  const res = await fetch(`${BASE_URL}/v1/people/mobile-phone-finder`, {
+    method: 'POST',
+    headers: headers(apiKey),
+    body: JSON.stringify(input),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`AI Ark phone finder failed (${res.status}): ${text.slice(0, 200)}`);
+  }
+  const body = (await res.json()) as { data?: unknown };
+  return pickAiArkPhone(body.data);
 }

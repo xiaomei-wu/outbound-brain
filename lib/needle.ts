@@ -15,11 +15,12 @@
  * skills, isConnected, degree. NO phone field.
  */
 
+import { getDb } from '@/lib/db';
 import { getCredentials } from '@/lib/connectors';
 
 const NEEDLE_URL = 'https://needle.app/mcp/v1';
 
-/** Only these tool names may be called. Every other name throws immediately. */
+/** Only these tool names may be called as read operations. Every other name throws immediately. */
 const READ_TOOLS = new Set([
   'needleGetMe',
   'needleListConnectedAccounts',
@@ -28,7 +29,12 @@ const READ_TOOLS = new Set([
   'needleListLinkedinPosts',
   'needleListLinkedinConversations',
   'needleListLinkedinConversationMessages',
+  'needleListCampaigns',
+  'needleListCampaignLeads',
 ]);
+
+/** Write tools — only suppressions. All others are forbidden. */
+const SUPPRESSION_TOOLS = new Set(['needleCreateSuppressions']);
 
 // ---------------------------------------------------------------------------
 // Output types
@@ -98,6 +104,22 @@ export interface NeedleLinkedinConversation {
   }>;
 }
 
+/** Verified shape from needleListCampaignLeads (2026-10-31). */
+export interface NeedleCampaignLead {
+  leadId: string;
+  firstName: string | null;
+  lastName: string | null;
+  companyName: string | null;
+  companyDomain: string | null;
+  jobTitle: string | null;
+  email: string | null;
+  status: string;
+}
+
+export type NeedleSuppressionEntry =
+  | { scope: 'lead'; leadId: string; reason: string; note?: string; expiresAt?: string | null }
+  | { scope: 'company'; companyDomain: string; reason: string; note?: string; expiresAt?: string | null };
+
 export interface NeedleLinkedinMessage {
   messageId?: string;
   sentAt?: string;
@@ -144,16 +166,17 @@ function extractData<T>(raw: unknown): T {
 /**
  * Low-level JSON-RPC call to Needle MCP.
  * Handles both SSE (data: lines) and plain JSON responses.
- * Throws for any tool name not in READ_TOOLS.
+ * Throws for any tool name not in the provided allowlist (defaults to READ_TOOLS).
  */
 async function mcpCall(
   apiKey: string,
   toolName: string,
-  toolArgs: Record<string, unknown>
+  toolArgs: Record<string, unknown>,
+  allowlist: Set<string> = READ_TOOLS
 ): Promise<unknown> {
-  if (!READ_TOOLS.has(toolName)) {
+  if (!allowlist.has(toolName)) {
     throw new Error(
-      `Needle tool "${toolName}" is not in the read-only allowlist. Refusing to call.`
+      `Needle tool "${toolName}" is not in the allowlist. Refusing to call.`
     );
   }
 
@@ -253,7 +276,25 @@ export async function resolveConnectedAccountId(): Promise<string | null> {
   const envId = process.env['NEEDLE_CONNECTED_ACCOUNT_ID'];
   if (envId?.trim()) return envId.trim();
 
-  // 3 & 4. Dynamic lookup (known to be unreliable, try anyway)
+  // 3. LinkedIn account of the Needle campaign chosen on /setup
+  try {
+    const { data: campaign } = await getDb()
+      .from('campaign')
+      .select('needle_campaign_id')
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+    const campaignId = (campaign as { needle_campaign_id: string | null } | null)?.needle_campaign_id;
+    if (campaignId) {
+      const match = (await listCampaigns()).find((c) => c.id === campaignId);
+      if (match?.linkedinAccountId) return match.linkedinAccountId;
+    }
+  } catch {
+    // fall through
+  }
+
+  // 4 & 5. Dynamic lookup (known to be unreliable, try anyway)
   try {
     const key = await resolveKey();
 
@@ -354,4 +395,78 @@ export async function listLinkedinConversationMessages(
   });
   const data = extractData<{ messages?: NeedleLinkedinMessage[] }>(raw);
   return data.messages ?? [];
+}
+
+/** Lists all campaigns in the Needle account (up to 100). */
+export async function listCampaigns(): Promise<
+  { id: string; name: string; status: string; enrollmentCount: number; linkedinAccountId: string | null }[]
+> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleListCampaigns', { limit: 100 });
+  const data = extractData<{
+    campaigns?: Array<{
+      id: string;
+      name: string;
+      status: string;
+      enrollmentCount: number;
+      connectedAccounts?: Array<{ connectedAccountId: string; channel?: string }>;
+      [key: string]: unknown;
+    }>;
+  }>(raw);
+  return (data.campaigns ?? []).map((c) => ({
+    id: c.id,
+    name: c.name,
+    status: c.status,
+    enrollmentCount: c.enrollmentCount ?? 0,
+    linkedinAccountId:
+      c.connectedAccounts?.find((a) => a.channel?.toLowerCase() === 'linkedin')?.connectedAccountId ?? null,
+  }));
+}
+
+/** Lists leads enrolled in a Needle campaign (up to 100 per page). */
+export async function listCampaignLeads(
+  campaignId: string,
+  cursor?: string
+): Promise<{ leads: NeedleCampaignLead[]; nextCursor: string | null }> {
+  const key = await resolveKey();
+  const args: Record<string, unknown> = { campaignId, limit: 100 };
+  if (cursor) args['cursor'] = cursor;
+
+  const raw = await mcpCall(key, 'needleListCampaignLeads', args);
+  const data = extractData<{
+    leads?: Array<{
+      leadId: string;
+      firstName?: string | null;
+      lastName?: string | null;
+      companyName?: string | null;
+      companyDomain?: string | null;
+      jobTitle?: string | null;
+      email?: string | null;
+      status: string;
+      [key: string]: unknown;
+    }>;
+    nextCursor?: string | null;
+  }>(raw);
+
+  const leads: NeedleCampaignLead[] = (data.leads ?? []).map((l) => ({
+    leadId: l.leadId,
+    firstName: l.firstName ?? null,
+    lastName: l.lastName ?? null,
+    companyName: l.companyName ?? null,
+    companyDomain: l.companyDomain ?? null,
+    jobTitle: l.jobTitle ?? null,
+    email: l.email ?? null,
+    status: l.status,
+  }));
+
+  return { leads, nextCursor: data.nextCursor ?? null };
+}
+
+/**
+ * Creates a suppression entry in Needle.
+ * Only call from an explicit user action.
+ */
+export async function createSuppression(entry: NeedleSuppressionEntry): Promise<void> {
+  const key = await resolveKey();
+  await mcpCall(key, 'needleCreateSuppressions', { entries: [entry] }, SUPPRESSION_TOOLS);
 }

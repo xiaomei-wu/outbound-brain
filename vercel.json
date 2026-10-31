@@ -1,8 +1,31 @@
 {
-  "regions": ["cdg1"],
+  "regions": [
+    "cdg1"
+  ],
   "functions": {
-    "app/api/leads/[id]/research/route.ts": { "maxDuration": 60 },
-    "app/api/leads/[id]/brief/route.ts": { "maxDuration": 30 },
-    "app/api/leads/[id]/outcome/route.ts": { "maxDuration": 60 }
+    "app/api/leads/[id]/research/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/leads/[id]/brief/route.ts": {
+      "maxDuration": 30
+    },
+    "app/api/leads/[id]/outcome/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/leads/[id]/icp-check/route.ts": {
+      "maxDuration": 180
+    },
+    "app/api/leads/icp-check-open/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/leads/sync-needle/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/leads/find/blitz/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/leads/find/route.ts": {
+      "maxDuration": 300
+    }
   }
 }

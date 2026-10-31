@@ -12,6 +12,7 @@ import {
   FileTextIcon,
   RotateCcwIcon,
   ChevronRightIcon,
+  ExternalLinkIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,6 +25,10 @@ import {
 } from '@/components/ui/dialog';
 import { SimulateEvent } from '@/components/simulate-event';
 import { PriorityBadge } from '@/components/priority-badge';
+import { OriginBadge } from '@/components/origin-badge';
+import { PhoneBadge } from '@/components/phone-badge';
+import { LeadSources } from '@/components/lead-sources';
+import type { FindResult } from '@/lib/lead-find';
 import type {
   FitStatus,
   Lead,
@@ -34,19 +39,25 @@ import type {
 } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
-// Tab definitions
+// Outer tab: view selector
 // ---------------------------------------------------------------------------
 
-type Tab = 'heute' | 'pruefen' | 'spaeter' | 'gestoppt';
+type OuterTab = 'real' | 'sortout' | 'demo';
 
-const TABS: { id: Tab; label: string }[] = [
+// ---------------------------------------------------------------------------
+// Inner tab: priority/status filter within real leads
+// ---------------------------------------------------------------------------
+
+type InnerTab = 'heute' | 'mit_nummer' | 'pruefen' | 'spaeter' | 'gestoppt';
+
+const INNER_TABS: { id: InnerTab; label: string }[] = [
   { id: 'heute', label: 'Heute' },
+  { id: 'mit_nummer', label: 'Mit Nummer' },
   { id: 'pruefen', label: 'Prüfen' },
   { id: 'spaeter', label: 'Später' },
   { id: 'gestoppt', label: 'Gestoppt' },
 ];
 
-/** Active-call statuses (excluding stopped/paused). */
 const ACTIVE_STATUSES: Lead['status'][] = ['new', 'researched', 'briefed', 'calling'];
 
 // ---------------------------------------------------------------------------
@@ -65,7 +76,10 @@ function sortLeads(leads: Lead[]): Lead[] {
     const pA = PRIORITY_ORDER[a.priority] ?? 99;
     const pB = PRIORITY_ORDER[b.priority] ?? 99;
     if (pA !== pB) return pA - pB;
-    // Agreed conversations first within same priority
+    // Callable leads (number, not do-not-call) first within the same priority
+    const cA = a.phone && !a.phoneDnc ? 0 : 1;
+    const cB = b.phone && !b.phoneDnc ? 0 : 1;
+    if (cA !== cB) return cA - cB;
     const wA = a.willingness === 'requested' ? 0 : 1;
     const wB = b.willingness === 'requested' ? 0 : 1;
     if (wA !== wB) return wA - wB;
@@ -73,12 +87,14 @@ function sortLeads(leads: Lead[]): Lead[] {
   });
 }
 
-function filterLeads(leads: Lead[], tab: Tab): Lead[] {
+function filterInner(leads: Lead[], tab: InnerTab): Lead[] {
   switch (tab) {
     case 'heute':
       return leads.filter(
         (l) => ACTIVE_STATUSES.includes(l.status) && l.priority !== 'review'
       );
+    case 'mit_nummer':
+      return leads.filter((l) => l.phone && !l.phoneDnc && ACTIVE_STATUSES.includes(l.status));
     case 'pruefen':
       return leads.filter((l) => l.priority === 'review' && l.status !== 'stopped');
     case 'spaeter':
@@ -90,19 +106,15 @@ function filterLeads(leads: Lead[], tab: Tab): Lead[] {
   }
 }
 
-function tabCount(leads: Lead[], tab: Tab): number {
-  return filterLeads(leads, tab).length;
-}
-
 // ---------------------------------------------------------------------------
 // Dimension chip helpers
 // ---------------------------------------------------------------------------
 
 const FIT_CONFIG: Record<FitStatus, { label: string; chip: string }> = {
-  fits: { label: 'Passt', chip: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' },
-  partial: { label: 'Teilweise', chip: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' },
-  outside: { label: 'Außerhalb', chip: 'bg-red-50 text-red-700 ring-1 ring-red-200' },
-  unknown: { label: 'Fit?', chip: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200' },
+  fits:    { label: 'Passt',      chip: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' },
+  partial: { label: 'Teilweise',  chip: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' },
+  outside: { label: 'Außerhalb',  chip: 'bg-red-50 text-red-700 ring-1 ring-red-200' },
+  unknown: { label: 'Fit?',       chip: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200' },
 };
 
 const NEED_WILLINGNESS_CHIP = (
@@ -120,9 +132,7 @@ const NEED_WILLINGNESS_CHIP = (
   return { label: 'Bedarf?', chip: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200' };
 };
 
-function triggerChip(
-  trigger: LeadTrigger | null
-): { label: string; chip: string } {
+function triggerChip(trigger: LeadTrigger | null): { label: string; chip: string } {
   if (!trigger || trigger.isActive === false)
     return { label: 'Kein Trigger', chip: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200' };
   if (trigger.verdict === 'strong')
@@ -132,28 +142,27 @@ function triggerChip(
   return { label: 'Trigger schwach', chip: 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200' };
 }
 
-/** Short action hint derived from lead state for the "Offen / Aktion" column. */
 function deriveOpenAction(lead: Lead): string {
   if (lead.status === 'stopped') return 'Gestoppt';
   if (lead.willingness === 'requested') return 'Gespräch vereinbart · Termin bestätigen';
   if (lead.willingness === 'declined') return 'Abgelehnt · Opt-out respektieren';
   switch (lead.priority) {
-    case 'high':
-      return lead.role ? 'Anruf vorbereiten' : 'Rolle klären · Anruf vorbereiten';
-    case 'medium':
-      return 'Bedarf erkunden · Kanal prüfen';
-    case 'low':
-      return 'Kontext ergänzen';
-    case 'review':
-      return 'Ausnahme-Queue · Nicht priorisieren';
+    case 'high':   return lead.role ? 'Anruf vorbereiten' : 'Rolle klären · Anruf vorbereiten';
+    case 'medium': return 'Bedarf erkunden · Kanal prüfen';
+    case 'low':    return 'Kontext ergänzen';
+    case 'review': return 'Ausnahme-Queue · Nicht priorisieren';
   }
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  chat: 'Chat',
-  call: 'Gespräch',
-  public: 'Öffentlich',
-  seller: 'Notiz',
+  chat: 'Chat', call: 'Gespräch', public: 'Öffentlich', seller: 'Notiz',
+};
+
+const SORTOUT_LABEL: Record<string, string> = {
+  not_a_fit:     'Kein Zielkunde',
+  wrong_contact: 'Falscher Ansprechpartner',
+  not_now:       'Nicht jetzt',
+  opt_out:       'Opt-out',
 };
 
 // ---------------------------------------------------------------------------
@@ -163,79 +172,80 @@ const SOURCE_LABELS: Record<string, string> = {
 interface LeadTableProps {
   leads: Lead[];
   triggersMap: Record<string, LeadTrigger | null>;
+  hasNeedle: boolean;
+  hasBlitz: boolean;
+  hasAiArk: boolean;
 }
 
-export function LeadTable({ leads, triggersMap }: LeadTableProps) {
+export function LeadTable({ leads, triggersMap, hasNeedle, hasBlitz, hasAiArk }: LeadTableProps) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<Tab>('heute');
+  const [outerTab, setOuterTab] = useState<OuterTab>('real');
+  const [innerTab, setInnerTab] = useState<InnerTab>('heute');
   const [showResetDialog, setShowResetDialog] = useState(false);
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importResult, setImportResult] = useState<number | null>(null);
+  const [showFindDialog, setShowFindDialog] = useState(false);
+  const [findResults, setFindResults] = useState<FindResult[] | null>(null);
 
   const [isFindingLeads, startFindLeads] = useTransition();
   const [isResearchingAll, startResearchAll] = useTransition();
   const [isGeneratingBriefs, startGenerateBriefs] = useTransition();
   const [isResetting, startReset] = useTransition();
 
-  const sorted = sortLeads(leads);
-  const filtered = filterLeads(sorted, activeTab);
-  const isEmpty = filtered.length === 0;
+  // Partition leads into three views
+  const realLeads   = leads.filter((l) => !l.isTest && l.sortoutStatus === null);
+  const sortedOut   = leads.filter((l) => l.sortoutStatus !== null);
+  const demoLeads   = leads.filter((l) => l.isTest);
 
-  // Top lead for explanation line (Heute tab only)
-  const topLead = activeTab === 'heute' ? filtered[0] ?? null : null;
+  const sorted = sortLeads(realLeads);
+  const filteredInner = outerTab === 'real' ? filterInner(sorted, innerTab) : [];
+
+  const topLead = outerTab === 'real' && innerTab === 'heute' ? filteredInner[0] ?? null : null;
 
   // ---- Actions ----
 
   function handleFindLeads() {
-    setShowImportDialog(true);
-    setImportResult(null);
+    setShowFindDialog(true);
+    setFindResults(null);
     startFindLeads(async () => {
       try {
-        const res = await fetch('/api/import', { method: 'POST' });
+        const res = await fetch('/api/leads/find', { method: 'POST' });
+        const data: { results?: FindResult[]; error?: string } = await res.json().catch(() => ({}));
         if (!res.ok) {
-          toast.error(
-            'Leads konnten nicht importiert werden. AI Ark Schlüssel auf der Integrationen-Seite prüfen.'
-          );
-          setShowImportDialog(false);
+          toast.error(data.error ?? 'Lead-Import fehlgeschlagen.');
+          setShowFindDialog(false);
           return;
         }
-        const data = (await res.json()) as { imported: number };
-        setImportResult(data.imported);
+        setFindResults(data.results ?? null);
         router.refresh();
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
-        setShowImportDialog(false);
+        setShowFindDialog(false);
       }
     });
   }
 
-  function handleResearchAll() {
-    const toResearch = leads.filter((l) => l.status === 'new');
-    if (toResearch.length === 0) {
-      toast.info('Alle Leads wurden bereits recherchiert.');
-      return;
-    }
+  /** Starts ICP checks for up to 10 unchecked companies; results arrive in the background. */
+  function handleIcpChecks() {
     startResearchAll(async () => {
-      let done = 0;
-      for (const lead of toResearch) {
-        try {
-          const res = await fetch(`/api/leads/${lead.id}/research`, { method: 'POST' });
-          if (res.ok) done++;
-        } catch {
-          // continue with others
+      try {
+        const res = await fetch('/api/leads/icp-check-open', { method: 'POST' });
+        const data: { scheduled?: number; error?: string } = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          toast.error(data.error ?? 'ICP-Checks konnten nicht gestartet werden.');
+          return;
         }
+        toast.info(
+          data.scheduled
+            ? `${data.scheduled} Firmen werden geprüft — Ergebnisse erscheinen in einigen Minuten.`
+            : 'Alle Firmen sind bereits geprüft.',
+        );
+      } catch {
+        toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
-      toast.success(
-        `Recherche abgeschlossen: ${done} von ${toResearch.length} Leads aktualisiert.`
-      );
-      router.refresh();
     });
   }
 
   function handleGenerateBriefs() {
-    const toGenerate = leads.filter(
-      (l) => l.status === 'researched' && !l.cachedBrief
-    );
+    const toGenerate = leads.filter((l) => l.status === 'researched' && !l.cachedBrief);
     if (toGenerate.length === 0) {
       toast.info('Für alle recherchierten Leads existieren bereits Briefings.');
       return;
@@ -246,9 +256,7 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
         try {
           const res = await fetch(`/api/leads/${lead.id}/brief`, { method: 'POST' });
           if (res.ok) done++;
-        } catch {
-          // continue
-        }
+        } catch { /* continue */ }
       }
       toast.success(`Briefings erstellt: ${done} von ${toGenerate.length} Leads.`);
       router.refresh();
@@ -259,15 +267,12 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
     startReset(async () => {
       try {
         const res = await fetch('/api/seed', { method: 'POST' });
-        if (!res.ok) {
-          toast.error('Demo-Reset fehlgeschlagen. Bitte erneut versuchen.');
-          return;
-        }
+        if (!res.ok) { toast.error('Demo-Reset fehlgeschlagen.'); return; }
         setShowResetDialog(false);
         router.refresh();
         toast.success('Demo-Daten wurden zurückgesetzt.');
       } catch {
-        toast.error('Verbindungsfehler. Bitte erneut versuchen.');
+        toast.error('Verbindungsfehler.');
       }
     });
   }
@@ -276,8 +281,8 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
 
   return (
     <div className="flex flex-col h-full">
-      {/* ---- Action bar (visually secondary) ---- */}
-      <div className="flex items-center gap-2 px-6 py-2.5 border-b border-border/40 bg-muted/10 flex-wrap">
+      {/* ---- Action bar ---- */}
+      <div className="flex items-center gap-2 px-4 sm:px-6 py-2.5 border-b border-border/40 bg-muted/10 flex-wrap">
         <Button
           variant="outline"
           size="sm"
@@ -285,27 +290,19 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
           disabled={anyBusy}
           className="text-xs"
         >
-          {isFindingLeads ? (
-            <Loader2Icon className="h-3 w-3 animate-spin" />
-          ) : (
-            <UsersIcon className="h-3 w-3" />
-          )}
+          {isFindingLeads ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <UsersIcon className="h-3 w-3" />}
           Leads finden
         </Button>
 
         <Button
           variant="outline"
           size="sm"
-          onClick={handleResearchAll}
+          onClick={handleIcpChecks}
           disabled={anyBusy}
           className="text-xs"
         >
-          {isResearchingAll ? (
-            <Loader2Icon className="h-3 w-3 animate-spin" />
-          ) : (
-            <SearchIcon className="h-3 w-3" />
-          )}
-          Alle recherchieren
+          {isResearchingAll ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SearchIcon className="h-3 w-3" />}
+          Offene ICP-Checks starten
         </Button>
 
         <Button
@@ -315,22 +312,16 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
           disabled={anyBusy}
           className="text-xs"
         >
-          {isGeneratingBriefs ? (
-            <Loader2Icon className="h-3 w-3 animate-spin" />
-          ) : (
-            <FileTextIcon className="h-3 w-3" />
-          )}
+          {isGeneratingBriefs ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <FileTextIcon className="h-3 w-3" />}
           Briefings erstellen
         </Button>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* TEST simulate controls */}
+        {demoLeads.length > 0 && (
+        <div className="ml-auto flex flex-wrap items-center gap-2">
           <SimulateEvent
             leads={leads.map((l) => ({ id: l.id, name: l.name, company: l.company }))}
             onEventFired={() => router.refresh()}
           />
-
-          {/* Demo reset — visually ghost / secondary */}
           <Button
             variant="ghost"
             size="sm"
@@ -338,49 +329,50 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
             disabled={anyBusy}
             className="text-xs text-muted-foreground hover:text-destructive"
           >
-            {isResetting ? (
-              <Loader2Icon className="h-3 w-3 animate-spin" />
-            ) : (
-              <RotateCcwIcon className="h-3 w-3" />
-            )}
+            {isResetting ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <RotateCcwIcon className="h-3 w-3" />}
             Demo zurücksetzen
           </Button>
         </div>
+        )}
       </div>
 
-      {/* ---- Tabs ---- */}
-      <div className="flex items-center gap-1 px-6 pt-4 pb-0">
-        {TABS.map((tab) => {
-          const count = tabCount(leads, tab.id);
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                'px-3 py-1.5 rounded-md text-sm transition-colors',
-                activeTab === tab.id
-                  ? 'bg-foreground text-background font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-              )}
-            >
-              {tab.label}
-              <span
+      {/* ---- Outer tabs ---- */}
+      <div className="flex items-center gap-1 px-6 pt-4 pb-0 border-b border-border/30">
+        <OuterTabBtn id="real"    label="Echte Leads"   count={realLeads.length}  active={outerTab} onSelect={setOuterTab} />
+        <OuterTabBtn id="sortout" label="Aussortiert"   count={sortedOut.length}  active={outerTab} onSelect={setOuterTab} />
+        {demoLeads.length > 0 && (
+          <OuterTabBtn id="demo"    label="Demo (TEST)"   count={demoLeads.length}  active={outerTab} onSelect={setOuterTab} />
+        )}
+      </div>
+
+      {/* ---- Inner tabs (Echte Leads only) ---- */}
+      {outerTab === 'real' && realLeads.length > 0 && (
+        <div className="flex items-center gap-1 px-6 pt-3 pb-0">
+          {INNER_TABS.map((tab) => {
+            const count = filterInner(sorted, tab.id).length;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setInnerTab(tab.id)}
                 className={cn(
-                  'ml-1.5 text-[11px] tabular-nums',
-                  activeTab === tab.id
-                    ? 'text-background/70'
-                    : 'text-muted-foreground'
+                  'px-3 py-1.5 rounded-md text-sm transition-colors',
+                  innerTab === tab.id
+                    ? 'bg-foreground text-background font-medium'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
                 )}
               >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+                {tab.label}
+                <span className={cn('ml-1.5 text-[11px] tabular-nums', innerTab === tab.id ? 'text-background/70' : 'text-muted-foreground')}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {/* ---- Top-lead priority reason (Heute only) ---- */}
+      {/* ---- Top-lead priority reason (Heute + real) ---- */}
       {topLead?.priorityReason && (
         <p className="px-6 pt-3 text-sm text-muted-foreground leading-relaxed">
           <span className="font-medium text-foreground">{topLead.name}</span>{' '}
@@ -388,60 +380,81 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
         </p>
       )}
 
-      {/* ---- Lead rows ---- */}
+      {/* ---- Content ---- */}
       <div className="flex-1 overflow-y-auto px-6 py-3">
-        {isEmpty ? (
-          <EmptyState tab={activeTab} />
-        ) : (
-          <div className="flex flex-col gap-1">
-            {filtered.map((lead, idx) => {
-              const bestTrigger = triggersMap[lead.id] ?? null;
-              const whyNow =
-                bestTrigger?.content ?? lead.cachedBrief?.whyNow ?? null;
-              const sourceKind =
-                bestTrigger?.evidenceKind
-                  ? (SOURCE_LABELS[bestTrigger.evidenceKind] ?? null)
-                  : null;
-              const isTop = idx === 0;
+        {outerTab === 'real' && (
+          realLeads.length === 0
+            ? <RealEmptyState hasNeedle={hasNeedle} hasBlitz={hasBlitz} hasAiArk={hasAiArk} onDemoClick={demoLeads.length > 0 ? () => setOuterTab('demo') : undefined} />
+            : filteredInner.length === 0
+              ? <p className="py-8 text-center text-sm text-muted-foreground">Keine Leads in dieser Ansicht.</p>
+              : (
+                <div className="flex flex-col gap-1">
+                  {filteredInner.map((lead, idx) => {
+                    const bestTrigger = triggersMap[lead.id] ?? null;
+                    const whyNow = bestTrigger?.content ?? lead.cachedBrief?.whyNow ?? null;
+                    const sourceKind = bestTrigger?.evidenceKind ? (SOURCE_LABELS[bestTrigger.evidenceKind] ?? null) : null;
+                    return (
+                      <LeadRow
+                        key={lead.id}
+                        lead={lead}
+                        trigger={bestTrigger}
+                        whyNow={whyNow}
+                        sourceKind={sourceKind}
+                        isTop={idx === 0}
+                      />
+                    );
+                  })}
+                </div>
+              )
+        )}
 
-              return (
-                <LeadRow
-                  key={lead.id}
-                  lead={lead}
-                  trigger={bestTrigger}
-                  whyNow={whyNow}
-                  sourceKind={sourceKind}
-                  isTop={isTop}
-                />
-              );
-            })}
-          </div>
+        {outerTab === 'sortout' && (
+          sortedOut.length === 0
+            ? <p className="py-8 text-center text-sm text-muted-foreground">Keine aussortierten Leads.</p>
+            : (
+              <div className="flex flex-col gap-1">
+                {sortLeads(sortedOut).map((lead) => (
+                  <SortedOutRow key={lead.id} lead={lead} />
+                ))}
+              </div>
+            )
+        )}
+
+        {outerTab === 'demo' && (
+          demoLeads.length === 0
+            ? <p className="py-8 text-center text-sm text-muted-foreground">Keine Demo-Daten vorhanden.</p>
+            : (
+              <div className="flex flex-col gap-1">
+                {sortLeads(demoLeads).map((lead) => {
+                  const bestTrigger = triggersMap[lead.id] ?? null;
+                  const whyNow = bestTrigger?.content ?? lead.cachedBrief?.whyNow ?? null;
+                  const sourceKind = bestTrigger?.evidenceKind ? (SOURCE_LABELS[bestTrigger.evidenceKind] ?? null) : null;
+                  return (
+                    <LeadRow
+                      key={lead.id}
+                      lead={lead}
+                      trigger={bestTrigger}
+                      whyNow={whyNow}
+                      sourceKind={sourceKind}
+                      isTop={false}
+                    />
+                  );
+                })}
+              </div>
+            )
         )}
       </div>
 
       {/* ---- Reset dialog ---- */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Demo zurücksetzen?</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Demo zurücksetzen?</DialogTitle></DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Alle Daten werden gelöscht und durch die Demo-Daten ersetzt. Diese Aktion
-            kann nicht rückgängig gemacht werden.
+            Alle Daten werden gelöscht und durch die Demo-Daten ersetzt. Diese Aktion kann nicht rückgängig gemacht werden.
           </p>
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowResetDialog(false)}
-              disabled={isResetting}
-            >
-              Abbrechen
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => void handleReset()}
-              disabled={isResetting}
-            >
+            <Button variant="outline" onClick={() => setShowResetDialog(false)} disabled={isResetting}>Abbrechen</Button>
+            <Button variant="destructive" onClick={() => void handleReset()} disabled={isResetting}>
               {isResetting && <Loader2Icon className="h-4 w-4 animate-spin" />}
               Zurücksetzen
             </Button>
@@ -449,30 +462,30 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
         </DialogContent>
       </Dialog>
 
-      {/* ---- Import dialog ---- */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+      {/* ---- Find dialog ---- */}
+      <Dialog open={showFindDialog} onOpenChange={setShowFindDialog}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Leads importieren</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Leads finden</DialogTitle></DialogHeader>
           {isFindingLeads ? (
             <div className="flex items-center gap-3 py-4">
               <Loader2Icon className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">
-                AI Ark wird abgefragt…
-              </span>
+              <span className="text-sm text-muted-foreground">Lead-Quellen werden abgefragt…</span>
             </div>
-          ) : importResult !== null ? (
-            <p className="text-sm">
-              <span className="font-semibold">{importResult} Leads</span> wurden
-              importiert.
-            </p>
+          ) : findResults !== null ? (
+            <div className="flex flex-col gap-2 py-2">
+              {findResults.map((r) => (
+                <div key={r.source} className="flex items-center gap-2 text-sm">
+                  <span className={r.ok ? 'text-emerald-600' : 'text-muted-foreground'}>
+                    {r.ok ? '✓' : '–'}
+                  </span>
+                  <span>{r.message}</span>
+                </div>
+              ))}
+            </div>
           ) : null}
           {!isFindingLeads && (
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowImportDialog(false)}>
-                Schließen
-              </Button>
+              <Button variant="outline" onClick={() => setShowFindDialog(false)}>Schließen</Button>
             </DialogFooter>
           )}
         </DialogContent>
@@ -482,7 +495,40 @@ export function LeadTable({ leads, triggersMap }: LeadTableProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Row
+// Outer tab button
+// ---------------------------------------------------------------------------
+
+function OuterTabBtn({
+  id, label, count, active, onSelect,
+}: {
+  id: OuterTab;
+  label: string;
+  count: number;
+  active: OuterTab;
+  onSelect: (t: OuterTab) => void;
+}) {
+  const isActive = active === id;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(id)}
+      className={cn(
+        'px-3 py-1.5 rounded-t-md text-sm transition-colors border-b-2',
+        isActive
+          ? 'border-foreground text-foreground font-medium'
+          : 'border-transparent text-muted-foreground hover:text-foreground hover:bg-muted'
+      )}
+    >
+      {label}
+      <span className={cn('ml-1.5 text-[11px] tabular-nums', isActive ? 'text-foreground/70' : 'text-muted-foreground')}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lead row (real + demo tabs)
 // ---------------------------------------------------------------------------
 
 interface LeadRowProps {
@@ -494,12 +540,9 @@ interface LeadRowProps {
 }
 
 function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
-  const fitCfg = FIT_CONFIG[lead.fitStatus ?? 'unknown'];
+  const fitCfg  = FIT_CONFIG[lead.fitStatus ?? 'unknown'];
   const trigCfg = triggerChip(trigger);
-  const needCfg = NEED_WILLINGNESS_CHIP(
-    lead.needStatus ?? 'unknown',
-    lead.willingness ?? 'unknown'
-  );
+  const needCfg = NEED_WILLINGNESS_CHIP(lead.needStatus ?? 'unknown', lead.willingness ?? 'unknown');
   const openAction = deriveOpenAction(lead);
 
   return (
@@ -507,30 +550,27 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
       href={`/leads/${lead.id}`}
       className={cn(
         'group flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50',
-        isTop
-          ? 'border-foreground/20 bg-card shadow-sm'
-          : 'border-border/50 bg-background'
+        isTop ? 'border-foreground/20 bg-card shadow-sm' : 'border-border/50 bg-background'
       )}
     >
-      {/* Priority badge — leftmost, fixed width */}
       <div className="shrink-0 pt-0.5">
         <PriorityBadge priority={lead.priority} />
       </div>
 
-      {/* Main content */}
       <div className="flex flex-1 flex-col gap-1 min-w-0">
-        {/* Name · role · company */}
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-sm font-semibold text-foreground">{lead.name}</span>
-          {lead.role && (
-            <span className="text-xs text-muted-foreground">{lead.role}</span>
-          )}
-          {lead.company && (
-            <span className="text-xs text-muted-foreground">· {lead.company}</span>
-          )}
+          {lead.role && <span className="text-xs text-muted-foreground">{lead.role}</span>}
+          {lead.company && <span className="text-xs text-muted-foreground">· {lead.company}</span>}
         </div>
 
-        {/* Why-now line with source kind */}
+        {/* Origin + phone badges */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <OriginBadge origin={lead.origin} detail={lead.originDetail} />
+          <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
+        </div>
+
+        {/* Why-now / trigger */}
         {whyNow && (
           <p className="text-xs text-muted-foreground leading-relaxed line-clamp-1">
             {whyNow}
@@ -542,7 +582,7 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
           </p>
         )}
 
-        {/* Three dimension chips */}
+
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           <DimChip label={fitCfg.label} className={fitCfg.chip} />
           <DimChip label={trigCfg.label} className={trigCfg.chip} />
@@ -550,14 +590,49 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
         </div>
       </div>
 
-      {/* Offen / Aktion column */}
       <div className="shrink-0 max-w-[180px] hidden sm:flex flex-col items-end">
-        <p className="text-xs text-muted-foreground text-right leading-snug">
-          {openAction}
-        </p>
+        <p className="text-xs text-muted-foreground text-right leading-snug">{openAction}</p>
       </div>
 
-      {/* Arrow */}
+      <ChevronRightIcon className="h-4 w-4 shrink-0 mt-1 text-muted-foreground group-hover:text-foreground transition-colors" />
+    </Link>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sorted-out row
+// ---------------------------------------------------------------------------
+
+function SortedOutRow({ lead }: { lead: Lead }) {
+  const statusLabel = lead.sortoutStatus ? (SORTOUT_LABEL[lead.sortoutStatus] ?? lead.sortoutStatus) : '';
+  const until = lead.sortoutUntil
+    ? new Date(lead.sortoutUntil).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+
+  return (
+    <Link
+      href={`/leads/${lead.id}`}
+      className="group flex items-start gap-3 rounded-lg border border-border/50 bg-background px-4 py-3 transition-colors hover:bg-muted/50"
+    >
+      <div className="flex flex-1 flex-col gap-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-sm font-semibold text-foreground">{lead.name}</span>
+          {lead.company && <span className="text-xs text-muted-foreground">· {lead.company}</span>}
+        </div>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <OriginBadge origin={lead.origin} detail={lead.originDetail} />
+          <PhoneBadge phone={lead.phone} source={lead.phoneSource} dnc={lead.phoneDnc} />
+          <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+            {statusLabel}
+          </span>
+          {until && (
+            <span className="text-[10px] text-muted-foreground/70">bis {until}</span>
+          )}
+          {!lead.sortoutSyncedNeedle && (
+            <span className="text-[10px] text-muted-foreground/50 italic">nur lokal</span>
+          )}
+        </div>
+      </div>
       <ChevronRightIcon className="h-4 w-4 shrink-0 mt-1 text-muted-foreground group-hover:text-foreground transition-colors" />
     </Link>
   );
@@ -577,20 +652,39 @@ function DimChip({ label, className }: { label: string; className: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Empty state
+// Empty state for real leads
 // ---------------------------------------------------------------------------
 
-function EmptyState({ tab }: { tab: Tab }) {
-  const messages: Record<Tab, string> = {
-    heute: 'Noch keine aktiven Leads. Leads finden oder unter Setup eine Kampagne einrichten.',
-    pruefen: 'Keine Leads in der Prüf-Queue.',
-    spaeter: 'Keine Leads im Status „Später".',
-    gestoppt: 'Keine gestoppten Leads.',
-  };
+function RealEmptyState({
+  hasNeedle, hasBlitz, hasAiArk, onDemoClick,
+}: {
+  hasNeedle: boolean;
+  hasBlitz: boolean;
+  hasAiArk: boolean;
+  onDemoClick?: () => void;
+}) {
   return (
-    <p className="py-8 text-center text-sm text-muted-foreground">
-      {messages[tab]}
-    </p>
+    <div className="flex flex-col gap-6 py-10 max-w-md mx-auto">
+      <div className="flex flex-col gap-2">
+        <p className="text-base font-medium text-foreground">Noch keine echten Leads.</p>
+        <p className="text-sm text-muted-foreground">
+          Verbinde eine Lead-Quelle und klicke auf &bdquo;Leads finden&ldquo;, um zu starten.
+        </p>
+      </div>
+
+      <LeadSources hasNeedle={hasNeedle} hasBlitz={hasBlitz} hasAiArk={hasAiArk} compact />
+
+{onDemoClick && (
+      <button
+        type="button"
+        onClick={onDemoClick}
+        className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors self-start"
+      >
+        <ExternalLinkIcon className="h-3.5 w-3.5" />
+        Demo (TEST) ansehen
+      </button>
+      )}
+    </div>
   );
 }
 
@@ -602,10 +696,7 @@ export function LeadTableSkeleton() {
   return (
     <div className="flex flex-col gap-2 px-6 py-4">
       {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex items-center gap-4 rounded-lg border border-border/50 px-4 py-3"
-        >
+        <div key={i} className="flex items-center gap-4 rounded-lg border border-border/50 px-4 py-3">
           <Skeleton className="h-5 w-10 rounded shrink-0" />
           <div className="flex flex-1 flex-col gap-1.5">
             <Skeleton className="h-4 w-40" />

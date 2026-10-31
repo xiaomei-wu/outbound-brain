@@ -25,6 +25,8 @@ export const env = {
   NEEDLE_API_KEY:         () => optional('NEEDLE_API_KEY'),
   NEEDLE_WEBHOOK_SECRET:  () => optional('NEEDLE_WEBHOOK_SECRET'),
   AI_ARK_API_KEY:         () => optional('AI_ARK_API_KEY'),
+  BLITZ_API_KEY:          () => optional('BLITZ_API_KEY'),
+  LUSHA_API_KEY:          () => optional('LUSHA_API_KEY'),
   ZAPMAIL_SMTP_URL:       () => optional('ZAPMAIL_SMTP_URL'),
   ZAPMAIL_IMAP_URL:       () => optional('ZAPMAIL_IMAP_URL'),
 } as const;

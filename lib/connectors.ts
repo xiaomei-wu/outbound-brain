@@ -8,6 +8,8 @@ import { env } from '@/lib/env';
 import { getDb } from '@/lib/db';
 import { decrypt } from '@/lib/crypto';
 import { getCredits } from '@/lib/aiark';
+import { blitzKeyInfo } from '@/lib/blitz';
+import { lushaUsage } from '@/lib/lusha';
 import { lookup } from 'node:dns/promises';
 import nodemailer from 'nodemailer';
 
@@ -219,6 +221,40 @@ async function testZapmail(config: Record<string, string>): Promise<{ ok: boolea
 }
 
 // ---------------------------------------------------------------------------
+// BlitzAPI connector
+// ---------------------------------------------------------------------------
+
+async function testBlitz(config: Record<string, string>): Promise<{ ok: boolean; message: string }> {
+  const apiKey = config['apiKey'];
+  if (!apiKey) return { ok: false, message: 'Kein API-Schlüssel angegeben.' };
+
+  try {
+    const { recordsRemaining } = await blitzKeyInfo(apiKey);
+    return { ok: true, message: `Verbunden — ${recordsRemaining} Datensätze übrig.` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `BlitzAPI nicht erreichbar: ${msg.slice(0, 120)}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Lusha connector
+// ---------------------------------------------------------------------------
+
+async function testLusha(config: Record<string, string>): Promise<{ ok: boolean; message: string }> {
+  const apiKey = config['apiKey'];
+  if (!apiKey) return { ok: false, message: 'Kein API-Schlüssel angegeben.' };
+
+  try {
+    const { remaining } = await lushaUsage(apiKey);
+    return { ok: true, message: `Verbunden — ${remaining} Credits übrig.` };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, message: `Lusha nicht erreichbar: ${msg.slice(0, 120)}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Connector registry
 // ---------------------------------------------------------------------------
 
@@ -277,6 +313,20 @@ export const connectors: Record<ConnectorId, Connector> = {
     ],
     test: testZapmail,
   },
+  blitz: {
+    id: 'blitz',
+    label: 'BlitzAPI',
+    description: 'Firmen- und Entscheider-Suche (Telefon nur US)',
+    fields: [{ name: 'apiKey', label: 'API-Schlüssel', placeholder: 'blitz_…', secret: true }],
+    test: testBlitz,
+  },
+  lusha: {
+    id: 'lusha',
+    label: 'Lusha',
+    description: 'Telefonnummern (auf Klick, kostet Credits)',
+    fields: [{ name: 'apiKey', label: 'API-Schlüssel', placeholder: 'lusha_…', secret: true }],
+    test: testLusha,
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -326,6 +376,14 @@ export async function getCredentials(
       const smtpUrl = env.ZAPMAIL_SMTP_URL() ?? '';
       const imapUrl = env.ZAPMAIL_IMAP_URL() ?? '';
       return smtpUrl ? { smtpUrl, imapUrl } : null;
+    }
+    case 'blitz': {
+      const apiKey = env.BLITZ_API_KEY();
+      return apiKey ? { apiKey } : null;
+    }
+    case 'lusha': {
+      const apiKey = env.LUSHA_API_KEY();
+      return apiKey ? { apiKey } : null;
     }
   }
 }

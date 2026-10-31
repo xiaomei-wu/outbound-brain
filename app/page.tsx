@@ -1,7 +1,9 @@
 import type { Lead, LeadTrigger } from '@/lib/types';
 import { getDb } from '@/lib/db';
 import { toLead, toLeadTrigger, type LeadRow, type LeadTriggerRow } from '@/lib/mappers';
+import { getCredentials } from '@/lib/connectors';
 import { LeadTable } from '@/components/lead-table';
+import { FunnelLine } from '@/components/funnel-line';
 import { DbError } from '@/components/db-error';
 
 export const dynamic = 'force-dynamic';
@@ -9,47 +11,62 @@ export const dynamic = 'force-dynamic';
 interface CockpitData {
   leads: Lead[];
   triggersMap: Record<string, LeadTrigger | null>;
+  hasNeedle: boolean;
+  hasBlitz: boolean;
+  hasAiArk: boolean;
 }
 
-/** Loads all leads and the best non-rejected active trigger per lead. Returns null on DB failure. */
+/** Loads all leads, best trigger per lead, and connector connectivity. */
 async function fetchCockpitData(): Promise<CockpitData | null> {
   try {
     const db = getDb();
 
-    // Fetch all leads (sorting is done client-side by priority → willingness → fitScore)
-    const { data: leadRows, error } = await db.from('lead').select('*');
-    if (error || !leadRows) return null;
+    const [leadRes, credsResults] = await Promise.all([
+      db.from('lead').select('*'),
+      Promise.all([
+        getCredentials('needle'),
+        getCredentials('blitz'),
+        getCredentials('ai_ark'),
+      ]),
+    ]);
 
-    const leads = (leadRows as LeadRow[]).map(toLead);
+    if (leadRes.error || !leadRes.data) return null;
+
+    const leads = (leadRes.data as LeadRow[]).map(toLead);
     const leadIds = leads.map((l) => l.id);
     const triggersMap: Record<string, LeadTrigger | null> = {};
 
-    if (leadIds.length === 0) return { leads, triggersMap };
+    if (leadIds.length > 0) {
+      const { data: triggerRows, error: trigError } = await db
+        .from('lead_trigger')
+        .select('*')
+        .in('lead_id', leadIds)
+        .neq('verdict', 'reject');
 
-    // Fetch active, non-rejected triggers for all leads
-    const { data: triggerRows, error: trigError } = await db
-      .from('lead_trigger')
-      .select('*')
-      .in('lead_id', leadIds)
-      .neq('verdict', 'reject');
-
-    if (trigError || !triggerRows) return null;
-
-    const triggers = (triggerRows as LeadTriggerRow[]).map(toLeadTrigger);
-
-    for (const id of leadIds) {
-      const forLead = triggers.filter((t) => t.leadId === id);
-      // Prefer active triggers, then strong verdict
-      const active = forLead.filter((t) => t.isActive !== false);
-      triggersMap[id] =
-        active.find((t) => t.verdict === 'strong') ??
-        active.find((t) => t.verdict === 'usable') ??
-        forLead.find((t) => t.verdict === 'strong') ??
-        forLead.find((t) => t.verdict === 'usable') ??
-        null;
+      if (!trigError && triggerRows) {
+        const triggers = (triggerRows as LeadTriggerRow[]).map(toLeadTrigger);
+        for (const id of leadIds) {
+          const forLead = triggers.filter((t) => t.leadId === id);
+          const active = forLead.filter((t) => t.isActive !== false);
+          triggersMap[id] =
+            active.find((t) => t.verdict === 'strong') ??
+            active.find((t) => t.verdict === 'usable') ??
+            forLead.find((t) => t.verdict === 'strong') ??
+            forLead.find((t) => t.verdict === 'usable') ??
+            null;
+        }
+      }
     }
 
-    return { leads, triggersMap };
+    const [needleCreds, blitzCreds, aiArkCreds] = credsResults;
+
+    return {
+      leads,
+      triggersMap,
+      hasNeedle: needleCreds != null,
+      hasBlitz: blitzCreds != null,
+      hasAiArk: aiArkCreds != null,
+    };
   } catch {
     return null;
   }
@@ -63,13 +80,13 @@ export default async function CockpitPage() {
   const data = await fetchCockpitData();
   if (!data) return <DbError />;
 
-  const { leads, triggersMap } = data;
+  const { leads, triggersMap, hasNeedle, hasBlitz, hasAiArk } = data;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Page header */}
       <div className="px-6 pt-5 pb-3 border-b border-border/60 shrink-0">
-        <div className="flex items-baseline gap-3">
+        <div className="flex items-baseline gap-3 flex-wrap">
           <h1 className="text-lg font-semibold tracking-tight">Heute</h1>
           <span className="text-sm text-muted-foreground">
             {new Date().toLocaleDateString('de-DE', {
@@ -80,11 +97,22 @@ export default async function CockpitPage() {
             })}
           </span>
         </div>
+
+        {/* Funnel line — real leads only */}
+        <div className="mt-2">
+          <FunnelLine leads={leads} />
+        </div>
       </div>
 
-      {/* Lead table (client component — handles tabs, priority sort, row clicks) */}
+      {/* Lead table (client component) */}
       <div className="flex-1 min-h-0 overflow-hidden">
-        <LeadTable leads={leads} triggersMap={triggersMap} />
+        <LeadTable
+          leads={leads}
+          triggersMap={triggersMap}
+          hasNeedle={hasNeedle}
+          hasBlitz={hasBlitz}
+          hasAiArk={hasAiArk}
+        />
       </div>
     </div>
   );

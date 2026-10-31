@@ -36,8 +36,8 @@ export default function IntegrationsPage() {
           <IntegrationCard
             connectorId="needle"
             label="Needle"
-            description="LinkedIn-Suche und Outreach via MCP"
-            helpText="Deinen Needle-API-Key findest du im Needle-Dashboard unter Settings → API Keys. Für LinkedIn-Recherche benötigt."
+            description="Hauptquelle: Leads aus der Needle-Kampagne"
+            helpText="Deinen Needle-API-Key findest du im Needle-Dashboard unter Settings → API Keys. Danach auf der Setup-Seite die Kampagne wählen. Die LinkedIn-Konto-ID wird automatisch aus der Kampagne übernommen."
             fields={[
               {
                 name: "apiKey",
@@ -50,6 +50,36 @@ export default function IntegrationsPage() {
                 label: "LinkedIn-Konto-ID (optional)",
                 placeholder: "00000000-…",
                 isPassword: false,
+              },
+            ]}
+          />
+
+          <IntegrationCard
+            connectorId="blitz"
+            label="BlitzAPI"
+            description="Firmen- und Entscheider-Suche (optional)"
+            helpText="Findet Projektentwickler in Deutschland und ihre Entscheider. Telefonnummern liefert BlitzAPI nur für US-Kontakte."
+            fields={[
+              {
+                name: "apiKey",
+                label: "API Key",
+                placeholder: "BLITZ-…",
+                isPassword: true,
+              },
+            ]}
+          />
+
+          <IntegrationCard
+            connectorId="lusha"
+            label="Lusha"
+            description="Telefonnummern auf Klick (optional, kostet Credits)"
+            helpText="Sucht die Nummer eines Ansprechpartners erst, wenn du im Lead auf „Nummer über Lusha suchen“ klickst. Nummern mit Nicht-anrufen-Kennzeichen werden nie zum Anruf angeboten."
+            fields={[
+              {
+                name: "apiKey",
+                label: "API Key",
+                placeholder: "Lusha API Key",
+                isPassword: true,
               },
             ]}
           />

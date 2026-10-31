@@ -13,6 +13,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { refreshLeadPriority } from '@/lib/priority';
 import { toLead, type LeadRow } from '@/lib/mappers';
+import { companyKey } from '@/lib/origin';
 import {
   resolveConnectedAccountId,
   getLinkedinProfile,
@@ -186,11 +187,14 @@ export async function POST(request: Request) {
         role: profile.jobTitle ?? null,
         company: profile.companyName ?? null,
         company_domain: profile.companyDomain ?? null,
+        company_key: companyKey(profile.companyDomain ?? null, profile.companyName ?? null),
         region: profile.location ?? null,
         phone: null,   // Needle LinkedIn profile provides no phone field
         profile_url: profileUrl,
         needle_lead_id: identity,
         source: 'needle',
+        origin: 'needle_search',
+        is_test: false,
         fit_score: 0,
         interest_score: 0,
         priority: 'low',

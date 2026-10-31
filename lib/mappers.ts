@@ -4,6 +4,11 @@
  */
 
 import type {
+  CallCard,
+  CompanyCheck,
+  IcpScore,
+  LeadOrigin,
+  SortoutStatus,
   Campaign,
   TriggerCatalogEntry,
   Integration,
@@ -50,6 +55,8 @@ export interface CampaignRow {
   tone: string;
   offer_knowledge: string;
   min_sample_size: number;
+  needle_campaign_id: string | null;
+  needle_campaign_name: string | null;
   is_active: boolean;
   created_at: string;
 }
@@ -102,7 +109,27 @@ export interface LeadRow {
   status: string;
   owner: string | null;
   last_alert_at: string | null;
+  origin: string;
+  origin_detail: string | null;
+  is_test: boolean;
+  company_key: string | null;
+  sortout_status: string | null;
+  sortout_synced_needle: boolean;
+  sortout_until: string | null;
+  phone_source: string | null;
+  phone_dnc: boolean;
+  call_card: unknown | null;
   created_at: string;
+}
+
+export interface CompanyCheckRow {
+  id: string;
+  company_key: string;
+  company_name: string;
+  domain: string | null;
+  result: unknown;
+  score: string;
+  checked_at: string;
 }
 
 export interface LeadTriggerRow {
@@ -236,6 +263,8 @@ export function toCampaign(row: CampaignRow): Campaign {
     tone: row.tone,
     offerKnowledge: row.offer_knowledge,
     minSampleSize: row.min_sample_size,
+    needleCampaignId: row.needle_campaign_id ?? null,
+    needleCampaignName: row.needle_campaign_name ?? null,
     isActive: row.is_active,
     createdAt: row.created_at,
   };
@@ -293,7 +322,30 @@ export function toLead(row: LeadRow): Lead {
     status: row.status as Lead['status'],
     owner: row.owner,
     lastAlertAt: row.last_alert_at,
+    origin: (row.origin ?? 'manual') as LeadOrigin,
+    originDetail: row.origin_detail ?? null,
+    isTest: row.is_test ?? false,
+    companyKey: row.company_key ?? null,
+    sortoutStatus: (row.sortout_status ?? null) as SortoutStatus | null,
+    sortoutSyncedNeedle: row.sortout_synced_needle ?? false,
+    sortoutUntil: row.sortout_until ?? null,
+    phoneSource: row.phone_source ?? null,
+    phoneDnc: row.phone_dnc ?? false,
+    callCard: (row.call_card ?? null) as CallCard | null,
     createdAt: row.created_at,
+  };
+}
+
+export function toCompanyCheck(row: CompanyCheckRow): CompanyCheck {
+  const result = row.result as Omit<CompanyCheck, 'id' | 'companyKey' | 'checkedAt'>;
+  return {
+    ...result,
+    id: row.id,
+    companyKey: row.company_key,
+    companyName: row.company_name,
+    domain: row.domain,
+    score: row.score as IcpScore,
+    checkedAt: row.checked_at,
   };
 }
 
@@ -447,6 +499,8 @@ export function toInsertCampaign(
     tone: c.tone,
     offer_knowledge: c.offerKnowledge,
     min_sample_size: c.minSampleSize,
+    needle_campaign_id: c.needleCampaignId,
+    needle_campaign_name: c.needleCampaignName,
     is_active: c.isActive,
   };
 }
@@ -492,6 +546,16 @@ export function toInsertLead(
     status: l.status,
     owner: l.owner,
     last_alert_at: l.lastAlertAt,
+    origin: l.origin,
+    origin_detail: l.originDetail,
+    is_test: l.isTest,
+    company_key: l.companyKey,
+    sortout_status: l.sortoutStatus,
+    sortout_synced_needle: l.sortoutSyncedNeedle,
+    sortout_until: l.sortoutUntil,
+    phone_source: l.phoneSource,
+    phone_dnc: l.phoneDnc,
+    call_card: l.callCard,
   };
 }
 

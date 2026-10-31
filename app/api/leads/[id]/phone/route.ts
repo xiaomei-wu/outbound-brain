@@ -19,7 +19,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const { error } = await getDb().from('lead').update({ phone: parsed.data.phone }).eq('id', id);
+  const { error } = await getDb()
+    .from('lead')
+    .update({ phone: parsed.data.phone, phone_source: 'manuell', phone_dnc: false })
+    .eq('id', id);
   if (error) {
     console.error('[phone POST]', error);
     return Response.json(

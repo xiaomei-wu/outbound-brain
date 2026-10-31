@@ -38,15 +38,15 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="h-full flex flex-col bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="light" disableTransitionOnChange>
           {/* Top nav */}
-          <header className="h-[52px] shrink-0 border-b border-border bg-background flex items-center px-6 gap-8">
+          <header className="h-[52px] shrink-0 border-b border-border bg-background flex items-center px-4 sm:px-6 gap-4 sm:gap-8">
             <Link
               href="/"
-              className="text-sm font-semibold tracking-tight text-foreground hover:opacity-70 transition-opacity"
+              className="shrink-0 whitespace-nowrap text-sm font-semibold tracking-tight text-foreground hover:opacity-70 transition-opacity"
             >
               Outbound Brain
             </Link>
 
-            <nav className="flex items-center gap-1" aria-label="Hauptnavigation">
+            <nav className="flex min-w-0 items-center gap-1 overflow-x-auto" aria-label="Hauptnavigation">
               {NAV_LINKS.map(({ href, label }) => (
                 <Link
                   key={href}

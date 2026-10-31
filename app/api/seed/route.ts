@@ -1,5 +1,9 @@
 /**
- * POST /api/seed  — resets demo data to canonical state (5 leads, campaign, triggers).
+ * POST /api/seed  — resets demo TEST data to canonical state.
+ *
+ * Only touches rows with is_test = true (leads, their child rows, company_check).
+ * Prepared companies (origin='prepared', is_test=false) and real leads are never deleted.
+ *
  * Uses seedDemo() from lib/seed-data.ts — single source of truth shared with pnpm seed.
  */
 

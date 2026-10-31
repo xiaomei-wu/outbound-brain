@@ -1,6 +1,7 @@
 /**
- * POST /api/campaign  — upsert the active campaign
- * GET  /api/campaign  — read the active campaign
+ * POST  /api/campaign        — upsert the active campaign
+ * GET   /api/campaign        — read the active campaign
+ * PATCH /api/campaign        — set needleCampaignId + needleCampaignName on the active campaign
  *
  * v2: carries offerKnowledge and minSampleSize fields.
  */
@@ -59,6 +60,8 @@ export async function POST(request: Request) {
       tone: body.tone ?? 'professional',
       offerKnowledge: body.offerKnowledge ?? '',
       minSampleSize: body.minSampleSize ?? 3,
+      needleCampaignId: body.needleCampaignId ?? null,
+      needleCampaignName: body.needleCampaignName ?? null,
       isActive: true,
     });
 
@@ -77,5 +80,36 @@ export async function POST(request: Request) {
   } catch (e) {
     console.error('[campaign POST]', e);
     return err('Kampagne konnte nicht gespeichert werden. Bitte erneut versuchen.', 500);
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const body = (await request.json()) as {
+      needleCampaignId?: string | null;
+      needleCampaignName?: string | null;
+    };
+
+    const db = getDb();
+
+    const { data, error } = await db
+      .from('campaign')
+      .update({
+        needle_campaign_id: body.needleCampaignId ?? null,
+        needle_campaign_name: body.needleCampaignName ?? null,
+      })
+      .eq('is_active', true)
+      .select('*')
+      .single();
+
+    if (error || !data) {
+      console.error('[campaign PATCH]', error);
+      return err('Kampagne konnte nicht aktualisiert werden. Bitte erneut versuchen.');
+    }
+
+    return Response.json({ campaign: toCampaign(data as CampaignRow) });
+  } catch (e) {
+    console.error('[campaign PATCH]', e);
+    return err('Kampagne konnte nicht aktualisiert werden. Bitte erneut versuchen.', 500);
   }
 }
