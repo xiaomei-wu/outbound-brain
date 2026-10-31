@@ -2,14 +2,14 @@ import { cn } from '@/lib/utils';
 import type { EngagementStage } from '@/lib/types';
 
 const LABEL: Record<EngagementStage, string> = {
-  invited: 'Einladung offen',
+  invited: 'Einladung gesendet',
   connected: 'Vernetzt',
   messaged: 'Angeschrieben',
   replied: 'Geantwortet',
 };
 
 const STYLE: Record<EngagementStage, string> = {
-  invited: 'bg-zinc-100 text-zinc-600 ring-1 ring-zinc-200',
+  invited: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
   connected: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
   messaged: 'bg-sky-50 text-sky-700 ring-1 ring-sky-200',
   replied: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',

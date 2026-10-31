@@ -8,8 +8,9 @@ import { z } from 'zod';
 import { getDb } from '@/lib/db';
 import { toLead } from '@/lib/mappers';
 import type { LeadRow } from '@/lib/mappers';
-import type { Lead, ContextKind, FitStatus, NeedStatus, Priority, PriorityResult, WillingnessStatus } from '@/lib/types';
+import type { EngagementStage, Lead, ContextKind, FitStatus, NeedStatus, Priority, PriorityResult, WillingnessStatus } from '@/lib/types';
 import { analyzeLeadReplies } from '@/lib/needle-replies';
+import { laterStage } from '@/lib/reply-routing';
 import { refreshLeadPriority } from '@/lib/priority';
 
 // ---------------------------------------------------------------------------
@@ -270,7 +271,14 @@ export async function addContext(
     : { data: null };
   if (!check) await refreshLeadPriority(leadId);
 
-  if (input.kind !== 'note') await analyzeLeadReplies(leadId);
+  if (input.kind !== 'note') {
+    // A pasted conversation is a real touchpoint: replied if the contact wrote, else messaged
+    const stage: EngagementStage = rows.some((r) => r.author === 'contact') ? 'replied' : 'messaged';
+    const { data: cur } = await db.from('lead').select('engagement_stage').eq('id', leadId).single();
+    const next = laterStage((cur as { engagement_stage: EngagementStage | null } | null)?.engagement_stage ?? null, stage);
+    await db.from('lead').update({ engagement_stage: next, engagement_at: new Date().toISOString() }).eq('id', leadId);
+    await analyzeLeadReplies(leadId);
+  }
 
   const { data: updated } = await db
     .from('lead')

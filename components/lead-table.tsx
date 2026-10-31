@@ -31,7 +31,7 @@ import { OriginBadge } from '@/components/origin-badge';
 import { PhoneBadge } from '@/components/phone-badge';
 import { ReplyBadge } from '@/components/reply-badge';
 import { EngagementBadge } from '@/components/engagement-badge';
-import { engagementRank } from '@/lib/reply-routing';
+import { compareLeads, hasTouchpoint } from '@/lib/lead-ranking';
 import { LeadSources } from '@/components/lead-sources';
 import type { FindResult } from '@/lib/lead-find';
 import type {
@@ -39,7 +39,6 @@ import type {
   Lead,
   LeadTrigger,
   NeedStatus,
-  Priority,
   WillingnessStatus,
 } from '@/lib/types';
 
@@ -53,10 +52,11 @@ type OuterTab = 'real' | 'sortout' | 'demo';
 // Inner tab: priority/status filter within real leads
 // ---------------------------------------------------------------------------
 
-type InnerTab = 'heute' | 'antworten' | 'mit_nummer' | 'pruefen' | 'spaeter' | 'gestoppt';
+type InnerTab = 'heute' | 'in_kontakt' | 'antworten' | 'mit_nummer' | 'pruefen' | 'spaeter' | 'gestoppt';
 
 const INNER_TABS: { id: InnerTab; label: string }[] = [
   { id: 'heute', label: 'Heute' },
+  { id: 'in_kontakt', label: 'In Kontakt' },
   { id: 'antworten', label: 'Antworten' },
   { id: 'mit_nummer', label: 'Mit Nummer' },
   { id: 'pruefen', label: 'Prüfen' },
@@ -70,31 +70,9 @@ const ACTIVE_STATUSES: Lead['status'][] = ['new', 'researched', 'briefed', 'call
 // Priority sort helpers
 // ---------------------------------------------------------------------------
 
-const PRIORITY_ORDER: Record<Priority, number> = {
-  high: 0,
-  medium: 1,
-  low: 2,
-  review: 3,
-};
-
+/** Touchpoints first (lib/lead-ranking.ts), then ICP priority, callable, call requests, fit. */
 function sortLeads(leads: Lead[]): Lead[] {
-  return [...leads].sort((a, b) => {
-    const pA = PRIORITY_ORDER[a.priority] ?? 99;
-    const pB = PRIORITY_ORDER[b.priority] ?? 99;
-    if (pA !== pB) return pA - pB;
-    // Warmer campaign contacts first (replied > messaged > connected > invited)
-    const eA = engagementRank(a.engagementStage);
-    const eB = engagementRank(b.engagementStage);
-    if (eA !== eB) return eB - eA;
-    // Callable leads (number, not do-not-call) first within the same priority
-    const cA = a.phone && !a.phoneDnc ? 0 : 1;
-    const cB = b.phone && !b.phoneDnc ? 0 : 1;
-    if (cA !== cB) return cA - cB;
-    const wA = a.willingness === 'requested' ? 0 : 1;
-    const wB = b.willingness === 'requested' ? 0 : 1;
-    if (wA !== wB) return wA - wB;
-    return b.fitScore - a.fitScore;
-  });
+  return [...leads].sort(compareLeads);
 }
 
 function filterInner(leads: Lead[], tab: InnerTab): Lead[] {
@@ -103,6 +81,8 @@ function filterInner(leads: Lead[], tab: InnerTab): Lead[] {
       return leads.filter(
         (l) => ACTIVE_STATUSES.includes(l.status) && l.priority !== 'review'
       );
+    case 'in_kontakt':
+      return leads.filter((l) => l.engagementStage !== null);
     case 'antworten':
       return leads.filter((l) => l.replySignal && l.replySignal !== 'neutral');
     case 'mit_nummer':
@@ -624,7 +604,9 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
       href={`/leads/${lead.id}`}
       className={cn(
         'group flex items-start gap-3 rounded-lg border px-4 py-3 transition-colors hover:bg-muted/50',
-        isTop ? 'border-foreground/20 bg-card shadow-sm' : 'border-border/50 bg-background'
+        isTop ? 'border-foreground/20 bg-card shadow-sm' : 'border-border/50 bg-background',
+        // Real touchpoint with the person: marked with a coloured edge
+        hasTouchpoint(lead) && 'border-l-4 border-l-sky-500'
       )}
     >
       <div className="shrink-0 pt-0.5">
