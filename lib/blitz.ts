@@ -283,5 +283,7 @@ export function mapBlitzPerson(p: BlitzPerson, c: BlitzCompany): NewLeadRow {
     engagement_at: null,
     icp_status: null,
     icp_status_at: null,
+    needle_enrolled_at: null,
+    needle_enroll_pending: false,
   };
 }

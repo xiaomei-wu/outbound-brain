@@ -133,6 +133,7 @@ export default async function CockpitPage() {
           leads={leads}
           triggersMap={triggersMap}
           icpScores={icpScores}
+          needleSends={refill?.mode !== 'auto'}
           hasNeedle={hasNeedle}
           hasBlitz={hasBlitz}
           hasAiArk={hasAiArk}

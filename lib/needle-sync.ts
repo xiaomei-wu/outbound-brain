@@ -68,6 +68,8 @@ export function mapCampaignLead(l: NeedleCampaignLead, campaignName: string): Ne
     engagement_at: null,
     icp_status: null,
     icp_status_at: null,
+    needle_enrolled_at: new Date().toISOString(),
+    needle_enroll_pending: false,
   };
 }
 

@@ -22,7 +22,7 @@ export function campaignSends(graph: { nodes?: { kind?: string }[] } | null | un
 
 const OPEN_STATUSES: Lead['status'][] = ['new', 'researched', 'briefed', 'calling'];
 
-type QueueLead = Pick<Lead, 'id' | 'isTest' | 'sortoutStatus' | 'status' | 'priority' | 'companyKey' | 'needleLeadId'>;
+type QueueLead = Pick<Lead, 'id' | 'isTest' | 'sortoutStatus' | 'status' | 'priority' | 'companyKey' | 'needleEnrolledAt'>;
 
 function isOpenAB(l: QueueLead, scores: Map<string, string>): boolean {
   const score = l.companyKey ? scores.get(l.companyKey) : undefined;
@@ -36,17 +36,17 @@ function isOpenAB(l: QueueLead, scores: Map<string, string>): boolean {
 }
 
 /**
- * Open A/B leads in Needle (from the campaign or enrolled by the app) that can still be called.
+ * Open A/B leads in the Needle campaign (enrolled there) that can still be called.
  * The refill threshold looks only at these (Xiaomei, 2026-10-31); other sources are the supply.
  */
 export function openQueueCount(leads: QueueLead[], scores: Map<string, string>): number {
-  return leads.filter((l) => l.needleLeadId !== null && isOpenAB(l, scores)).length;
+  return leads.filter((l) => l.needleEnrolledAt !== null && isOpenAB(l, scores)).length;
 }
 
-/** Open A/B leads with a LinkedIn profile that are not in Needle yet, best first. */
+/** Open A/B leads not in the campaign yet (in Needle already, or with a LinkedIn profile), best first. */
 export function selectRefillCandidates(leads: Lead[], scores: Map<string, string>, limit: number): string[] {
   return leads
-    .filter((l) => isOpenAB(l, scores) && !l.needleLeadId && Boolean(l.profileUrl?.includes('linkedin.com/')))
+    .filter((l) => isOpenAB(l, scores) && !l.needleEnrolledAt && (Boolean(l.needleLeadId) || Boolean(l.profileUrl?.includes('linkedin.com/'))))
     .sort(compareLeads)
     .slice(0, limit)
     .map((l) => l.id);

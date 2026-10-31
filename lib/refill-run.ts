@@ -88,7 +88,14 @@ export async function enrollLeads(leadIds: string[]): Promise<{ enrolled: number
   if (!campaign.needleCampaignId) return { enrolled: 0, skipped: leadIds.length, message: 'Keine Needle-Kampagne gewählt.' };
 
   const { leads, checkByKey } = await loadLeadsAndScores();
-  const chosen = leads.filter((l) => leadIds.includes(l.id) && !l.needleLeadId && l.profileUrl && l.companyKey && checkByKey.has(l.companyKey));
+  const chosen = leads.filter(
+    (l) =>
+      leadIds.includes(l.id) &&
+      !l.needleEnrolledAt &&
+      (l.needleLeadId || l.profileUrl) &&
+      l.companyKey &&
+      checkByKey.has(l.companyKey),
+  );
   if (chosen.length === 0) return { enrolled: 0, skipped: leadIds.length, message: 'Keine passenden Kandidaten.' };
 
   const now = new Date();
@@ -111,30 +118,60 @@ export async function enrollLeads(leadIds: string[]): Promise<{ enrolled: number
     };
   };
 
-  const created = await createNeedleLeads(chosen.map(toNeedle));
-  const pairs: { lead: Lead; needleId: string }[] = [];
-  created.forEach((r, i) => {
-    if (r.id && chosen[i]) pairs.push({ lead: chosen[i], needleId: r.id });
-  });
+  // Leads found by the Needle search already exist there (ICP properties set by the write-back)
+  const pairs: { lead: Lead; needleId: string }[] = chosen
+    .filter((l) => l.needleLeadId)
+    .map((l) => ({ lead: l, needleId: l.needleLeadId! }));
 
-  // A Needle lead that is already linked to another row here is not enrolled twice
-  const { data: taken } = await db.from('lead').select('needle_lead_id').in('needle_lead_id', pairs.map((p) => p.needleId));
-  const takenIds = new Set(((taken ?? []) as { needle_lead_id: string }[]).map((t) => t.needle_lead_id));
-  const fresh = pairs.filter((p) => !takenIds.has(p.needleId));
-  if (fresh.length === 0) return { enrolled: 0, skipped: chosen.length, message: 'Alle Kandidaten sind schon in Needle.' };
+  const toCreate = chosen.filter((l) => !l.needleLeadId && l.profileUrl);
+  if (toCreate.length > 0) {
+    const created = await createNeedleLeads(toCreate.map(toNeedle));
+    const createdPairs: { lead: Lead; needleId: string }[] = [];
+    created.forEach((r, i) => {
+      if (r.id && toCreate[i]) createdPairs.push({ lead: toCreate[i], needleId: r.id });
+    });
+    // A Needle lead that is already linked to another row here is not enrolled twice
+    const { data: taken } = await db.from('lead').select('needle_lead_id').in('needle_lead_id', createdPairs.map((p) => p.needleId));
+    const takenIds = new Set(((taken ?? []) as { needle_lead_id: string }[]).map((t) => t.needle_lead_id));
+    pairs.push(...createdPairs.filter((p) => !takenIds.has(p.needleId)));
+  }
+  if (pairs.length === 0) return { enrolled: 0, skipped: chosen.length, message: 'Alle Kandidaten sind schon in Needle.' };
 
-  const { accepted, skipped } = await enrollInCampaign(campaign.needleCampaignId, fresh.map((p) => p.needleId));
-  for (const { lead, needleId } of fresh) {
+  const { accepted, skipped } = await enrollInCampaign(campaign.needleCampaignId, pairs.map((p) => p.needleId));
+  for (const { lead, needleId } of pairs) {
     await db
       .from('lead')
-      .update({ needle_lead_id: needleId, needle_synced_at: now.toISOString(), origin_detail: lead.originDetail ?? 'in Needle-Kampagne aufgenommen' })
+      .update({
+        needle_lead_id: needleId,
+        needle_synced_at: now.toISOString(),
+        needle_enrolled_at: now.toISOString(),
+        needle_enroll_pending: false,
+        origin_detail: lead.originDetail ?? 'in Needle-Kampagne aufgenommen',
+      })
       .eq('id', lead.id);
   }
   return {
     enrolled: accepted,
-    skipped: skipped + (chosen.length - fresh.length),
+    skipped: skipped + (chosen.length - pairs.length),
     message: `${accepted} Lead${accepted === 1 ? '' : 's'} in „${campaign.needleCampaignName ?? 'Needle-Kampagne'}“ aufgenommen` + (skipped ? `, ${skipped} von Needle übersprungen (z. B. Sperrliste).` : '.'),
   };
+}
+
+/**
+ * Leads found by "Neue Leads über Needle" wait for their ICP check; afterwards the A/B ones are
+ * enrolled (the click was the approval) and the rest stop waiting.
+ */
+export async function enrollPendingChecked(): Promise<number> {
+  const db = getDb();
+  const { leads, scores } = await loadLeadsAndScores();
+  const pending = leads.filter((l) => l.needleEnrollPending && l.companyKey && scores.has(l.companyKey));
+  if (pending.length === 0) return 0;
+  const ab = pending.filter((l) => ['A', 'B'].includes(scores.get(l.companyKey!) ?? '') && !l.sortoutStatus);
+  const rest = pending.filter((l) => !ab.includes(l));
+  if (rest.length > 0) await db.from('lead').update({ needle_enroll_pending: false }).in('id', rest.map((l) => l.id));
+  if (ab.length === 0) return 0;
+  const { enrolled } = await enrollLeads(ab.map((l) => l.id));
+  return enrolled;
 }
 
 /**

@@ -42,8 +42,8 @@
     "app/api/refill/enroll/route.ts": {
       "maxDuration": 60
     },
-    "app/api/refill/manual/route.ts": {
-      "maxDuration": 60
+    "app/api/needle/search-leads/route.ts": {
+      "maxDuration": 300
     }
   }
 }

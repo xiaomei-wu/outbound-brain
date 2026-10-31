@@ -33,6 +33,7 @@ const READ_TOOLS = new Set([
   'needleListCampaignLeads',
   'needleSearchEvents',
   'needleGetCampaign',
+  'needleSearchLinkedinPeopleClassic',
 ]);
 
 /** Write tools — only suppressions. All others are forbidden. */
@@ -572,4 +573,29 @@ export async function enrollInCampaign(campaignId: string, leadIds: string[]): P
     return { accepted, skipped: data.results.length - accepted };
   }
   return { accepted: data.accepted?.length ?? 0, skipped: data.skipped?.length ?? 0 };
+}
+
+export interface NeedleSearchHit {
+  publicIdentifier?: string;
+  profileUrl?: string;
+  fullName?: string;
+  headline?: string;
+  location?: string;
+  companyName?: string | null;
+  jobTitle?: string | null;
+}
+
+/** LinkedIn people search through the team account (read-only; counts against its LinkedIn quota). */
+export async function searchLinkedinPeople(
+  connectedAccountId: string,
+  query: { keywords: string; locations: string[]; cursor: string | null; limit: number },
+): Promise<{ hits: NeedleSearchHit[]; cursor: string | null; remainingToday: number | null }> {
+  const key = await resolveKey();
+  const raw = await mcpCall(key, 'needleSearchLinkedinPeopleClassic', {
+    connectedAccountId,
+    limit: query.limit,
+    ...(query.cursor ? { cursor: query.cursor } : { keywords: query.keywords, locations: query.locations }),
+  });
+  const data = extractData<{ hits?: NeedleSearchHit[]; cursor?: string | null; remainingUsage?: { day?: number | null } }>(raw);
+  return { hits: data.hits ?? [], cursor: data.cursor ?? null, remainingToday: data.remainingUsage?.day ?? null };
 }

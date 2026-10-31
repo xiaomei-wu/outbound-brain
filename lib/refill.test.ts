@@ -4,7 +4,7 @@ import type { Lead } from './types';
 
 const lead = (id: string, over: Partial<Lead> = {}): Lead =>
   ({
-    id, isTest: false, sortoutStatus: null, status: 'new', priority: 'high', needleLeadId: null,
+    id, isTest: false, sortoutStatus: null, status: 'new', priority: 'high', needleLeadId: null, needleEnrolledAt: null,
     profileUrl: `https://www.linkedin.com/in/${id}`, companyKey: `${id}.de`, engagementStage: null,
     phone: null, phoneDnc: false, willingness: 'open', fitScore: 50, ...over,
   }) as Lead;
@@ -24,7 +24,7 @@ describe('queue and candidates', () => {
   const scores = new Map([['a.de', 'A'], ['b.de', 'B'], ['c.de', 'C'], ['n.de', 'A'], ['x.de', 'A'], ['s.de', 'A'], ['l.de', 'A']]);
 
   it('counts only open A/B leads that are in Needle', () => {
-    const inNeedle = { needleLeadId: 'n' } as Partial<Lead>;
+    const inNeedle = { needleLeadId: 'n', needleEnrolledAt: '2026-10-31T10:00:00Z' } as Partial<Lead>;
     const leads = [
       lead('a', inNeedle), lead('b', inNeedle), lead('c', inNeedle),
       lead('n'), // A/B but from another source (not in Needle) → supply, not queue
@@ -35,10 +35,10 @@ describe('queue and candidates', () => {
     expect(openQueueCount(leads, scores)).toBe(2);
   });
 
-  it('picks A/B leads with a LinkedIn profile that are not in Needle yet', () => {
+  it('picks A/B leads that are not enrolled yet (in Needle already or with a LinkedIn profile)', () => {
     const leads = [
       lead('a'), lead('b', { priority: 'medium' }), lead('c'),
-      lead('n', { needleLeadId: 'already' }),
+      lead('n', { needleLeadId: 'already', needleEnrolledAt: '2026-10-31T10:00:00Z' }),
       lead('x', { profileUrl: null }),
     ];
     expect(selectRefillCandidates(leads, scores, 10)).toEqual(['a', 'b']);

@@ -131,6 +131,8 @@ export interface LeadRow {
   engagement_at: string | null;
   icp_status: string | null;
   icp_status_at: string | null;
+  needle_enrolled_at: string | null;
+  needle_enroll_pending: boolean;
   call_card: unknown | null;
   created_at: string;
 }
@@ -354,6 +356,8 @@ export function toLead(row: LeadRow): Lead {
     engagementAt: row.engagement_at ?? null,
     icpStatus: (row.icp_status ?? null) as IcpStatus | null,
     icpStatusAt: row.icp_status_at ?? null,
+    needleEnrolledAt: row.needle_enrolled_at ?? null,
+    needleEnrollPending: row.needle_enroll_pending ?? false,
     callCard: (row.call_card ?? null) as CallCard | null,
     createdAt: row.created_at,
   };
@@ -588,6 +592,8 @@ export function toInsertLead(
     engagement_at: l.engagementAt,
     icp_status: l.icpStatus,
     icp_status_at: l.icpStatusAt,
+    needle_enrolled_at: l.needleEnrolledAt,
+    needle_enroll_pending: l.needleEnrollPending,
     call_card: l.callCard,
   };
 }

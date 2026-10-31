@@ -294,6 +294,8 @@ export interface Lead {
   engagementAt: string | null;
   icpStatus: IcpStatus | null;
   icpStatusAt: string | null;
+  needleEnrolledAt: string | null; // enrolled in the chosen Needle campaign
+  needleEnrollPending: boolean;     // found by the Needle search; enrol after an A/B check
   callCard: CallCard | null;
   createdAt: string;
 }

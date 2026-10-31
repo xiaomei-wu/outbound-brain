@@ -172,12 +172,14 @@ interface LeadTableProps {
   triggersMap: Record<string, LeadTrigger | null>;
   /** lead id → ICP score, for sorting by ICP */
   icpScores: Record<string, string>;
+  /** The Needle campaign sends messages: enrolling means outreach (confirm first). */
+  needleSends: boolean;
   hasNeedle: boolean;
   hasBlitz: boolean;
   hasAiArk: boolean;
 }
 
-export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, hasAiArk }: LeadTableProps) {
+export function LeadTable({ leads, triggersMap, icpScores, needleSends, hasNeedle, hasBlitz, hasAiArk }: LeadTableProps) {
   const router = useRouter();
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('recommended');
@@ -231,11 +233,22 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
     });
   }
 
-  /** Enrolls checked A/B candidates in the Needle campaign now (the click is the approval). */
+  /**
+   * Needle searches LinkedIn for new people; after their ICP check the A/B ones enter the
+   * campaign. The click is the approval; a sending campaign asks for confirmation first.
+   */
   function handleSendToNeedle() {
+    if (
+      needleSends &&
+      !window.confirm(
+        'Die Needle-Kampagne versendet Nachrichten. Neue A/B-Leads aus der Suche werden nach dem ICP-Check aufgenommen und kontaktiert. Fortfahren?',
+      )
+    ) {
+      return;
+    }
     startSendToNeedle(async () => {
       try {
-        const res = await fetch('/api/refill/manual', { method: 'POST' });
+        const res = await fetch('/api/needle/search-leads', { method: 'POST' });
         const data: { message?: string; error?: string } = await res.json().catch(() => ({}));
         if (!res.ok) {
           toast.error(data.error ?? 'Aufnahme in die Needle-Kampagne fehlgeschlagen.');
@@ -243,6 +256,7 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
         }
         toast.info(data.message ?? 'Erledigt.');
         router.refresh();
+        setTimeout(() => router.refresh(), BACKGROUND_REFRESH_MS);
       } catch {
         toast.error('Verbindungsfehler. Bitte erneut versuchen.');
       }
@@ -398,10 +412,10 @@ export function LeadTable({ leads, triggersMap, icpScores, hasNeedle, hasBlitz, 
           onClick={handleSendToNeedle}
           disabled={anyBusy || !hasNeedle}
           className="text-xs"
-          title="Geprüfte A/B-Leads mit LinkedIn-Profil, die noch nicht in Needle sind, in die gewählte Needle-Kampagne aufnehmen (mit ICP-Eigenschaften)"
+          title="Needle sucht auf LinkedIn neue Projektentwickler (Deutschland). Nach dem ICP-Check kommen die A/B-Leads in die Needle-Kampagne."
         >
           {isSendingToNeedle ? <Loader2Icon className="h-3 w-3 animate-spin" /> : <SendIcon className="h-3 w-3" />}
-          Leads an Needle senden
+          Neue Leads über Needle
         </Button>
 
         <Button
