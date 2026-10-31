@@ -22,7 +22,7 @@ export function campaignSends(graph: { nodes?: { kind?: string }[] } | null | un
 
 const OPEN_STATUSES: Lead['status'][] = ['new', 'researched', 'briefed', 'calling'];
 
-type QueueLead = Pick<Lead, 'id' | 'isTest' | 'sortoutStatus' | 'status' | 'priority' | 'companyKey'>;
+type QueueLead = Pick<Lead, 'id' | 'isTest' | 'sortoutStatus' | 'status' | 'priority' | 'companyKey' | 'needleLeadId'>;
 
 function isOpenAB(l: QueueLead, scores: Map<string, string>): boolean {
   const score = l.companyKey ? scores.get(l.companyKey) : undefined;
@@ -35,9 +35,12 @@ function isOpenAB(l: QueueLead, scores: Map<string, string>): boolean {
   );
 }
 
-/** A/B leads that can still be called (not called, not sorted out, not answered negatively). */
+/**
+ * Open A/B leads in Needle (from the campaign or enrolled by the app) that can still be called.
+ * The refill threshold looks only at these (Xiaomei, 2026-10-31); other sources are the supply.
+ */
 export function openQueueCount(leads: QueueLead[], scores: Map<string, string>): number {
-  return leads.filter((l) => isOpenAB(l, scores)).length;
+  return leads.filter((l) => l.needleLeadId !== null && isOpenAB(l, scores)).length;
 }
 
 /** Open A/B leads with a LinkedIn profile that are not in Needle yet, best first. */

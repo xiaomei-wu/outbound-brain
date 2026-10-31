@@ -23,12 +23,14 @@ describe('campaignSends', () => {
 describe('queue and candidates', () => {
   const scores = new Map([['a.de', 'A'], ['b.de', 'B'], ['c.de', 'C'], ['n.de', 'A'], ['x.de', 'A'], ['s.de', 'A'], ['l.de', 'A']]);
 
-  it('counts open A/B leads that can still be called', () => {
+  it('counts only open A/B leads that are in Needle', () => {
+    const inNeedle = { needleLeadId: 'n' } as Partial<Lead>;
     const leads = [
-      lead('a'), lead('b'), lead('c'),
-      lead('x', { status: 'called' }),
-      lead('s', { sortoutStatus: 'not_now' }),
-      lead('l', { priority: 'low' }),
+      lead('a', inNeedle), lead('b', inNeedle), lead('c', inNeedle),
+      lead('n'), // A/B but from another source (not in Needle) → supply, not queue
+      lead('x', { ...inNeedle, status: 'called' }),
+      lead('s', { ...inNeedle, sortoutStatus: 'not_now' }),
+      lead('l', { ...inNeedle, priority: 'low' }),
     ];
     expect(openQueueCount(leads, scores)).toBe(2);
   });

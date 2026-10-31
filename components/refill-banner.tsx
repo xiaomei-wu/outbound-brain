@@ -59,7 +59,7 @@ export function RefillBanner({ state }: { state: RefillState }) {
     <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/40 bg-violet-50 px-4 py-2 text-xs text-violet-900 sm:px-6 dark:bg-violet-950/40 dark:text-violet-100">
       <span className="flex items-center gap-1.5">
         <UserPlusIcon className="h-3.5 w-3.5" />
-        Nur noch {state.open} offene A/B-Leads (Ziel: mindestens {state.threshold}).
+        Nur noch {state.open} offene A/B-Leads in Needle (Ziel: mindestens {state.threshold}).
       </span>
       {auto ? (
         <span className="flex items-center gap-1.5">
