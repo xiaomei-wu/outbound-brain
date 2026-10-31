@@ -89,7 +89,7 @@ export default async function CockpitPage() {
         <div className="flex items-baseline gap-3 flex-wrap">
           <h1 className="text-lg font-semibold tracking-tight">Heute</h1>
           <span className="text-sm text-muted-foreground">
-            {new Date().toLocaleDateString('de-DE', {
+            {new Date().toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin',
               weekday: 'long',
               day: 'numeric',
               month: 'long',

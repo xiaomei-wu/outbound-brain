@@ -147,7 +147,7 @@ export function IcpPanel({
 
       {/* Checked-at timestamp */}
       <p className="text-[10px] text-muted-foreground/60">
-        Geprüft {new Date(check.checkedAt).toLocaleString('de-DE', {
+        Geprüft {new Date(check.checkedAt).toLocaleString('de-DE', { timeZone: 'Europe/Berlin',
           day: 'numeric',
           month: 'short',
           year: 'numeric',

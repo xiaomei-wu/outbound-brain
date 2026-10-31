@@ -606,7 +606,7 @@ function LeadRow({ lead, trigger, whyNow, sourceKind, isTop }: LeadRowProps) {
 function SortedOutRow({ lead }: { lead: Lead }) {
   const statusLabel = lead.sortoutStatus ? (SORTOUT_LABEL[lead.sortoutStatus] ?? lead.sortoutStatus) : '';
   const until = lead.sortoutUntil
-    ? new Date(lead.sortoutUntil).toLocaleDateString('de-DE', { day: 'numeric', month: 'short', year: 'numeric' })
+    ? new Date(lead.sortoutUntil).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: 'numeric', month: 'short', year: 'numeric' })
     : null;
 
   return (

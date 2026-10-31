@@ -103,7 +103,7 @@ function ContextItem({ ctx }: { ctx: LeadContext }) {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleDateString('de-DE', {
+    return new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin',
       day: 'numeric',
       month: 'short',
       year: 'numeric',

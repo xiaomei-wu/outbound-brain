@@ -139,7 +139,7 @@ function formatRelative(iso: string): string {
     const days = Math.floor(hours / 24);
     if (days === 1) return 'gestern';
     if (days < 7) return `vor ${days} Tagen`;
-    return new Date(iso).toLocaleDateString('de-DE', {
+    return new Date(iso).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin',
       day: 'numeric',
       month: 'short',
     });

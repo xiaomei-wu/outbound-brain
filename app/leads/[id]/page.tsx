@@ -518,7 +518,7 @@ function PreviousCallLog({ log, leadId, triggers, defaultOpen }: PreviousCallLog
           </span>
         )}
         <span className="text-xs text-muted-foreground ml-auto">
-          {new Date(log.createdAt).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' })}
+          {new Date(log.createdAt).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin', day: 'numeric', month: 'short' })}
         </span>
         {log.analysis && (
           <span className="text-[11px] text-muted-foreground group-open:hidden">Auswertung anzeigen</span>

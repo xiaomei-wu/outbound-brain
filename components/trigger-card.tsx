@@ -202,7 +202,7 @@ function FeedbackPill({
 
 function formatDate(dateStr: string): string {
   try {
-    return new Date(dateStr).toLocaleDateString('de-DE', {
+    return new Date(dateStr).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin',
       day: 'numeric',
       month: 'short',
     });
